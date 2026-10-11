@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Midnight blue base -->
+    <color name="splash_background">#0D1B2A</color>
+    <!-- Warm ivory -->
+    <color name="cream">#F5EFE6</color>
+    <!-- Muted rose -->
+    <color name="rose">#C87B8B</color>
+    <!-- Subtle gold -->
+    <color name="gold">#C9A84C</color>
+</resources>

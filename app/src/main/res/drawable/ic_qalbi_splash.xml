@@ -1,0 +1,30 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Heart-inspired symbol for QALBI (قلبي = "my heart" in Arabic) -->
+    <!-- Outer warm glow ring -->
+    <path
+        android:fillColor="#20C9A84C"
+        android:pathData="M54,54 m-40,0 a40,40 0 1,0 80,0 a40,40 0 1,0 -80,0" />
+
+    <!-- Heart shape using two circles and a triangle approximation -->
+    <!-- Left lobe of heart -->
+    <path
+        android:fillColor="#C9A84C"
+        android:pathData="M54,72
+            C54,72 28,56 28,40
+            C28,30 36,24 44,24
+            C48,24 52,26 54,30
+            C56,26 60,24 64,24
+            C72,24 80,30 80,40
+            C80,56 54,72 54,72 Z" />
+
+    <!-- Inner highlight on heart -->
+    <path
+        android:fillColor="#40FFFFFF"
+        android:pathData="M44,28 C40,28 36,32 36,38 C36,42 38,46 40,50 C40,46 42,38 52,32 C49,29 46,28 44,28 Z" />
+
+</vector>
