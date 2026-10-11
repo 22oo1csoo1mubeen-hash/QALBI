@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // ─── Helper Functions ────────────────────────────────────────────────────
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -56,7 +56,77 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
     }
 
-    // Default deny for all other collections
+    // ─── Minimal Public Profiles: /publicProfiles/{userId} ───────────────────
+    match /publicProfiles/{userId} {
+      // Any authenticated user can read public profile summaries for pairing display
+      allow read: if isAuthenticated();
+
+      // Only owner can create or update their public profile; no sensitive fields permitted
+      allow create, update: if isOwner(userId)
+                            && request.resource.data.uid == userId
+                            && request.resource.data.username is string
+                            && !('email' in request.resource.data)
+                            && !('password' in request.resource.data);
+
+      allow delete: if isOwner(userId);
+    }
+
+    // ─── Temporary Pairing Codes: /pairingCodes/{code} ───────────────────────
+    match /pairingCodes/{code} {
+      // Disallow list queries across entire collection to prevent code harvesting/enumeration
+      allow list: if false;
+
+      // Allow single document lookup by exact code by authenticated users
+      allow get: if isAuthenticated();
+
+      // Create: authenticated user creates code with own creatorUid and status ACTIVE
+      allow create: if isAuthenticated()
+                    && request.resource.data.creatorUid == request.auth.uid
+                    && request.resource.data.code == code
+                    && request.resource.data.status == "ACTIVE"
+                    && code.size() == 8;
+
+      // Update:
+      // Case 1: Creator revoking their active code
+      // Case 2: Another authenticated user (not the creator) redeeming an active code
+      allow update: if isAuthenticated() && (
+        (resource.data.creatorUid == request.auth.uid && request.resource.data.status == "REVOKED")
+        ||
+        (resource.data.status == "ACTIVE"
+         && resource.data.creatorUid != request.auth.uid
+         && request.resource.data.status == "REDEEMED"
+         && request.resource.data.redeemedBy == request.auth.uid)
+      );
+
+      // Delete: owner only
+      allow delete: if isAuthenticated() && resource.data.creatorUid == request.auth.uid;
+    }
+
+    // ─── Friend Connections: /connections/{connectionId} ─────────────────────
+    match /connections/{connectionId} {
+      // Only connection members can read their connection
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.memberUids;
+
+      // Create: requester must be one of the members, exactly 2 members, status CONNECTED
+      allow create: if isAuthenticated()
+                    && request.auth.uid in request.resource.data.memberUids
+                    && request.resource.data.memberUids.size() == 2
+                    && request.resource.data.status == "CONNECTED";
+
+      // Disconnect: only connection members can delete the connection
+      allow delete: if isAuthenticated() && request.auth.uid in resource.data.memberUids;
+
+      // Connections cannot be updated arbitrarily
+      allow update: if false;
+    }
+
+    // ─── User Block List: /userBlocks/{blockerUid}/blockedUsers/{blockedUid} ─
+    match /userBlocks/{blockerUid}/blockedUsers/{blockedUid} {
+      // Only the blocking user can read or write their own block list
+      allow read, write: if isAuthenticated() && request.auth.uid == blockerUid;
+    }
+
+    // ─── Default Deny ────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

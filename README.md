@@ -6,15 +6,19 @@ QALBI (Arabic: قلبي, "my heart") is a native Android application that lets c
 
 ---
 
-## Current Status: Phase 2 Complete (Authentication & User Profiles)
+## Current Status: Phase 3 Complete (Friend Pairing System)
 
 - **Phase 1**: Complete 10-screen foundation with Jetpack Compose & Material 3.
-- **Phase 2**: Production-oriented Firebase Authentication & Cloud Firestore integration.
-  - Dual registration methods: Email & Username (Method A) or Username-only (Method B).
-  - Atomic username uniqueness via Firestore transactions.
-  - Persistent sessions and authentication-aware routing.
+- **Phase 2**: Production-oriented Firebase Authentication & Cloud Firestore integration (Email & Username accounts, atomic claims).
+- **Phase 3**: Atomic Friend Pairing System under strict ₹0 Spark plan.
+  - Cryptographically secure 8-character single-use pairing codes (Crockford Base32, 10-minute expiry).
+  - Concurrency-safe atomic redemption via Firestore transactions (`/pairingCodes/{code}`).
+  - Deterministic bidirectional connection documents (`/connections/{connectionId}`).
+  - Minimal public profile projections (`/publicProfiles/{uid}`) protecting email addresses.
+  - Real-time connected friends listener on Home and Connected Friends screens.
+  - Full Disconnect and Block functionality with mutual disconnection and blocklist enforcement.
+  - Comprehensive unit test suite (`FriendPairingTest`).
   - Restrictive Firestore security rules (`firestore.rules`).
-  - Unit tests for validation logic and models (`testDebugUnitTest`).
 
 ---
 

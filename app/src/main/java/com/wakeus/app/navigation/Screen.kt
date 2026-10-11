@@ -13,6 +13,9 @@ sealed class Screen(val route: String) {
     object Home             : Screen("home")
     object ConnectFriend    : Screen("connect_friend")
     object ConnectedFriends : Screen("connected_friends")
+    object FriendDetail     : Screen("friend_detail/{friendId}") {
+        fun withId(friendId: String) = "friend_detail/$friendId"
+    }
     object WakeUp           : Screen("wake_up/{friendId}") {
         fun withId(friendId: String) = "wake_up/$friendId"
     }

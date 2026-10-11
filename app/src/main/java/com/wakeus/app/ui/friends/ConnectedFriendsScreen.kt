@@ -2,7 +2,6 @@ package com.wakeus.app.ui.friends
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,29 +23,29 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.wakeus.app.data.model.Friend
-import com.wakeus.app.data.repository.QalbiRepository
-import com.wakeus.app.ui.components.DemoBadge
 import com.wakeus.app.ui.components.EmptyState
 import com.wakeus.app.ui.components.QalbiCard
 import com.wakeus.app.ui.components.QalbiTopBar
 import com.wakeus.app.ui.theme.MidnightBlue
 import com.wakeus.app.ui.theme.MutedRose
 import com.wakeus.app.ui.theme.SubtleGold
+import com.wakeus.app.viewmodel.FriendsViewModel
 
 @Composable
 fun ConnectedFriendsScreen(
     onBack: () -> Unit,
     onFriendSelected: (String) -> Unit,
+    viewModel: FriendsViewModel = viewModel(),
 ) {
-    // Phase 1: friends list is always empty. Demo friend is accessible
-    // only via explicit demo action on the Home screen.
-    val friends = emptyList<Friend>()
+    val friends by viewModel.friends.collectAsState()
 
     Scaffold(
         containerColor = MidnightBlue,
@@ -60,17 +59,14 @@ fun ConnectedFriendsScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(8.dp))
-            DemoBadge()
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
 
             if (friends.isEmpty()) {
                 QalbiCard(modifier = Modifier.fillMaxWidth(), innerPadding = 0.dp) {
                     EmptyState(
                         icon  = Icons.Filled.GroupOff,
                         title = "No connected friends",
-                        body  = "Exchange connection codes with a friend to see them here. " +
-                                "Real pairing arrives in Phase 3.",
+                        body  = "Exchange an 8-character connection code with a friend to pair and see them here.",
                     )
                 }
             } else {
@@ -85,26 +81,6 @@ fun ConnectedFriendsScreen(
                 }
             }
 
-            // Demo preview item — clearly labelled
-            Spacer(Modifier.height(24.dp))
-            Text(
-                text  = "Demo Preview",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            FriendListItem(
-                friend   = QalbiRepository.demoFriend,
-                onClick  = { onFriendSelected(QalbiRepository.demoFriend.id) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                text      = "↑ Tap to preview the Wake-Up screen with demo data",
-                style     = MaterialTheme.typography.bodySmall,
-                color     = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier  = Modifier.fillMaxWidth(),
-            )
             Spacer(Modifier.height(32.dp))
         }
     }
@@ -121,53 +97,53 @@ private fun FriendListItem(
         innerPadding = 16.dp,
     ) {
         Row(
-            verticalAlignment     = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier              = Modifier.fillMaxWidth(),
+            modifier          = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Avatar with initials
-                Box(
-                    modifier         = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(MutedRose),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text  = friend.initials,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MidnightBlue,
-                    )
-                }
-                Spacer(Modifier.width(14.dp))
-                Column {
-                    Text(
-                        text  = friend.displayName,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (friend.isDemo) {
-                            Text(
-                                text  = "[Demo] ",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = SubtleGold,
-                            )
-                        }
-                        Text(
-                            text  = friend.status,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+            // Avatar with initials
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(MutedRose),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text  = friend.initials,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSecondary,
+                )
             }
-            Icon(
-                imageVector        = Icons.AutoMirrored.Filled.NavigateNext,
-                contentDescription = null,
-                tint               = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+
+            Spacer(Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text  = friend.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text  = "@${friend.username}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text  = friend.status,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SubtleGold,
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    imageVector        = Icons.AutoMirrored.Filled.NavigateNext,
+                    contentDescription = null,
+                    tint               = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier           = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }

@@ -3,6 +3,7 @@ package com.wakeus.app.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,14 +12,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GroupAdd
-import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,24 +35,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.wakeus.app.data.model.Friend
 import com.wakeus.app.data.repository.QalbiRepository
-import com.wakeus.app.ui.components.DemoBadge
 import com.wakeus.app.ui.components.EmptyState
 import com.wakeus.app.ui.components.QalbiButton
 import com.wakeus.app.ui.components.QalbiCard
 import com.wakeus.app.ui.theme.MidnightBlue
+import com.wakeus.app.ui.theme.MutedRose
 import com.wakeus.app.ui.theme.SubtleGold
 
 @Composable
 fun HomeScreen(
     onConnectFriend: () -> Unit,
-    @Suppress("UNUSED_PARAMETER") onFriendSelected: (String) -> Unit,
+    onFriendSelected: (String) -> Unit,
     onConnectedFriends: () -> Unit,
     onProfile: () -> Unit,
 ) {
     val authState by QalbiRepository.authState.collectAsState()
     val user = (authState as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: QalbiRepository.demoUser
     val firstName = user.displayName.trim().split(" ").firstOrNull()?.ifEmpty { "there" } ?: "there"
+    val friends by QalbiRepository.friends.collectAsState(initial = emptyList())
 
     Scaffold(
         containerColor = MidnightBlue,
@@ -96,11 +100,7 @@ fun HomeScreen(
                 .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
-            Spacer(Modifier.height(4.dp))
-
-            // Demo badge
-            DemoBadge()
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
 
             // Personalized greeting
             Text(
@@ -110,7 +110,7 @@ fun HomeScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text  = "You have no wake-up requests today.",
+                text  = if (friends.isNotEmpty()) "You have ${friends.size} connected friend${if (friends.size > 1) "s" else ""}." else "Connect with a loved one to start waking each other.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -134,7 +134,7 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            text  = "Share a code to pair with someone you love.",
+                            text  = "Share a temporary code to pair without exchanging phone numbers.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -157,22 +157,35 @@ fun HomeScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
-                Text(
-                    text     = "See all",
-                    style    = MaterialTheme.typography.labelMedium,
-                    color    = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable(onClick = onConnectedFriends),
-                )
+                if (friends.isNotEmpty()) {
+                    Text(
+                        text     = "See all",
+                        style    = MaterialTheme.typography.labelMedium,
+                        color    = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable(onClick = onConnectedFriends),
+                    )
+                }
             }
             Spacer(Modifier.height(12.dp))
 
-            // Empty state — Phase 1 has no connected friends
-            QalbiCard(modifier = Modifier.fillMaxWidth(), innerPadding = 0.dp) {
-                EmptyState(
-                    icon  = Icons.Filled.WifiOff,
-                    title = "No connected friends yet",
-                    body  = "Once you and a friend exchange connection codes, they'll appear here.",
-                )
+            if (friends.isEmpty()) {
+                QalbiCard(modifier = Modifier.fillMaxWidth(), innerPadding = 0.dp) {
+                    EmptyState(
+                        icon  = Icons.Filled.WifiOff,
+                        title = "No connected friends yet",
+                        body  = "Exchange a 10-minute pairing code with a friend to establish an instant connection.",
+                    )
+                }
+            } else {
+                friends.take(3).forEach { friend ->
+                    HomeFriendItem(
+                        friend  = friend,
+                        onClick = { onFriendSelected(friend.id) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                    )
+                }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -186,14 +199,75 @@ fun HomeScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text  = "In Phase 3, you'll generate a unique code and share it with a friend. " +
-                            "They enter your code on their device, and you're paired — no phone numbers exchanged.",
+                    text  = "Generate an 8-character code and share it privately. When your friend enters the code within 10 minutes, both accounts connect automatically. Codes are single-use, private, and secure.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
             Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun HomeFriendItem(
+    friend: Friend,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    QalbiCard(
+        modifier     = modifier.clickable(onClick = onClick),
+        innerPadding = 16.dp,
+    ) {
+        Row(
+            modifier          = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Avatar with initials
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(MutedRose),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text  = friend.initials,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSecondary,
+                )
+            }
+
+            Spacer(Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text  = friend.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text  = "@${friend.username}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text  = friend.status,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SubtleGold,
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    imageVector        = Icons.AutoMirrored.Filled.NavigateNext,
+                    contentDescription = null,
+                    tint               = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier           = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }

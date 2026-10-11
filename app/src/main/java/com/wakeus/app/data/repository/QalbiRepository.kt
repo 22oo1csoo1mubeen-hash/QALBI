@@ -35,12 +35,6 @@ object QalbiRepository {
         email       = "alex.demo@example.com",
     )
 
-    // ─── Connected friends (empty list — Phase 1 requirement) ────────────────
-    // Friends list is intentionally empty to reflect honest empty state.
-    // To enable a demo flow, a single demo friend is exposed separately below.
-    private val _friends = MutableStateFlow<List<Friend>>(emptyList())
-    val friends: Flow<List<Friend>> = _friends.asStateFlow()
-
     /** Demo friend shown only when the user navigates to WakeUp via explicit demo link. */
     val demoFriend = Friend(
         id          = "demo-friend-001",
@@ -55,11 +49,25 @@ object QalbiRepository {
         return if (id == demoFriend.id) demoFriend else null
     }
 
-    // ─── Phase 2 Repositories ──────────────────────────────────────────────
+    // ─── Phase 2 & 3 Repositories ──────────────────────────────────────────
     val authRepository = AuthRepository()
     val userRepository = UserRepository()
+    val friendRepository = com.wakeus.app.data.friends.FriendRepository()
 
     val authState: StateFlow<com.wakeus.app.data.auth.AuthState> = authRepository.authState
+
+    /**
+     * Observes real connected friends dynamically for the currently authenticated user.
+     */
+    val friends: Flow<List<Friend>> = kotlinx.coroutines.flow.flow {
+        authRepository.authState.collect { state ->
+            if (state is com.wakeus.app.data.auth.AuthState.Authenticated) {
+                friendRepository.observeConnectedFriends(state.user.id).collect { emit(it) }
+            } else {
+                emit(emptyList())
+            }
+        }
+    }
 
     suspend fun registerWithEmail(
         displayName: String,
@@ -143,31 +151,114 @@ object QalbiRepository {
         password: String,
     ): Result<User> = login(emailOrUsername, password)
 
-    // ─── Mock connection code ─────────────────────────────────────────────────
+    // ─── Phase 3 Friend Pairing Operations ──────────────────────────────────
     /**
-     * Generates a UI-only connection code.
-     * This code is NOT redeemable on any server and is purely decorative
-     * for Phase 1 demonstration purposes.
+     * Generates and registers an authentic 8-character pairing code in Firestore.
      */
-    suspend fun generateConnectionCode(): ConnectionCode {
-        delay(600)
-        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        val code = (1..8).map { chars.random(Random) }.joinToString("")
-        return ConnectionCode(code = code)
+    suspend fun createPairingCode(): Result<com.wakeus.app.data.model.PairingCode> {
+        val user = (authState.value as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: demoUser
+        return if (friendRepository.isConfigured()) {
+            friendRepository.createPairingCode(user)
+        } else {
+            delay(600)
+            val code = friendRepository.generateSecureCode()
+            Result.success(
+                com.wakeus.app.data.model.PairingCode(
+                    code = code,
+                    creatorUid = user.id,
+                    creatorDisplayName = user.displayName,
+                    creatorUsername = user.username,
+                )
+            )
+        }
     }
 
     /**
-     * Simulates entering a friend's code.
-     * Always returns a "not yet functional" response in Phase 1.
+     * Cancels / revokes an active pairing code.
      */
-    suspend fun submitConnectionCode(code: String): Result<String> {
-        delay(1000)
-        return Result.failure(
-            UnsupportedOperationException(
-                "Real friend pairing will be enabled in Phase 3. " +
-                "Code '$code' was not sent to any server."
+    suspend fun revokePairingCode(code: String): Result<Unit> {
+        val user = (authState.value as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: demoUser
+        return if (friendRepository.isConfigured()) {
+            friendRepository.revokePairingCode(code, user.id)
+        } else {
+            Result.success(Unit)
+        }
+    }
+
+    /**
+     * Inspects a pairing code prior to redemption.
+     */
+    suspend fun inspectPairingCode(code: String): Result<com.wakeus.app.data.model.PairingCode> {
+        return if (friendRepository.isConfigured()) {
+            friendRepository.inspectPairingCode(code)
+        } else {
+            delay(500)
+            Result.success(
+                com.wakeus.app.data.model.PairingCode(
+                    code = code.uppercase(),
+                    creatorUid = "demo-friend-999",
+                    creatorDisplayName = "Sample Friend",
+                    creatorUsername = "sample.friend",
+                )
             )
+        }
+    }
+
+    /**
+     * Atomically redeems a pairing code in Firestore, establishing the bidirectional connection.
+     */
+    suspend fun redeemPairingCode(code: String): Result<Friend> {
+        val user = (authState.value as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: demoUser
+        return if (friendRepository.isConfigured()) {
+            friendRepository.redeemPairingCode(code, user.id)
+        } else {
+            delay(800)
+            Result.success(
+                Friend(
+                    id = "preview-friend-001",
+                    displayName = "New Friend",
+                    username = "new_friend",
+                    status = "Connected",
+                )
+            )
+        }
+    }
+
+    /**
+     * Disconnects a friend, removing the connection document.
+     */
+    suspend fun disconnectFriend(connectionId: String): Result<Unit> {
+        val user = (authState.value as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: demoUser
+        return if (friendRepository.isConfigured()) {
+            friendRepository.disconnectFriend(connectionId, user.id)
+        } else {
+            Result.success(Unit)
+        }
+    }
+
+    /**
+     * Blocks a user and severs any existing connection.
+     */
+    suspend fun blockUser(blockedUid: String, connectionId: String? = null): Result<Unit> {
+        val user = (authState.value as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: demoUser
+        return if (friendRepository.isConfigured()) {
+            friendRepository.blockUser(user.id, blockedUid, connectionId)
+        } else {
+            Result.success(Unit)
+        }
+    }
+
+    // ─── Legacy compatibility functions ──────────────────────────────────────
+    suspend fun generateConnectionCode(): ConnectionCode {
+        val result = createPairingCode()
+        return result.fold(
+            onSuccess = { ConnectionCode(it.code, "Expires in 10 minutes") },
+            onFailure = { ConnectionCode("ERROR", it.message ?: "Failed to generate") }
         )
+    }
+
+    suspend fun submitConnectionCode(code: String): Result<String> {
+        return redeemPairingCode(code).map { "Successfully connected with @${it.username}!" }
     }
 
     // ─── Mock wake-up ─────────────────────────────────────────────────────────

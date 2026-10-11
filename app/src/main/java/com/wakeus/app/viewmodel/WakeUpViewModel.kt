@@ -23,8 +23,31 @@ class WakeUpViewModel : ViewModel() {
     val uiState: StateFlow<WakeUpUiState> = _uiState.asStateFlow()
 
     fun loadFriend(friendId: String) {
-        val friend = QalbiRepository.getFriendById(friendId)
-        _uiState.update { it.copy(friend = friend) }
+        if (friendId == QalbiRepository.demoFriend.id) {
+            _uiState.update { it.copy(friend = QalbiRepository.demoFriend) }
+            return
+        }
+
+        viewModelScope.launch {
+            val profileResult = QalbiRepository.userRepository.getPublicProfile(friendId)
+            val profile = profileResult.getOrNull()
+            if (profile != null) {
+                _uiState.update {
+                    it.copy(
+                        friend = Friend(
+                            id = profile.uid,
+                            displayName = profile.displayName.ifBlank { "@${profile.username}" },
+                            username = profile.username,
+                            status = "Connected",
+                            isDemo = false,
+                        )
+                    )
+                }
+            } else {
+                val friend = QalbiRepository.getFriendById(friendId)
+                _uiState.update { it.copy(friend = friend) }
+            }
+        }
     }
 
     fun requestWakeUp() {

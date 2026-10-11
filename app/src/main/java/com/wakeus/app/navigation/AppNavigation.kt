@@ -88,7 +88,7 @@ fun AppNavigation(navController: NavHostController) {
         composable(Screen.Home.route) {
             HomeScreen(
                 onConnectFriend    = { navController.navigate(Screen.ConnectFriend.route) },
-                onFriendSelected   = { id -> navController.navigate(Screen.WakeUp.withId(id)) },
+                onFriendSelected   = { id -> navController.navigate(Screen.FriendDetail.withId(id)) },
                 onConnectedFriends = { navController.navigate(Screen.ConnectedFriends.route) },
                 onProfile          = { navController.navigate(Screen.Profile.route) },
             )
@@ -103,7 +103,19 @@ fun AppNavigation(navController: NavHostController) {
         composable(Screen.ConnectedFriends.route) {
             ConnectedFriendsScreen(
                 onBack           = { navController.popBackStack() },
-                onFriendSelected = { id -> navController.navigate(Screen.WakeUp.withId(id)) },
+                onFriendSelected = { id -> navController.navigate(Screen.FriendDetail.withId(id)) },
+            )
+        }
+
+        composable(
+            route = Screen.FriendDetail.route,
+            arguments = listOf(navArgument("friendId") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val friendId = backStackEntry.arguments?.getString("friendId") ?: ""
+            com.wakeus.app.ui.friends.FriendDetailScreen(
+                friendId = friendId,
+                onBack   = { navController.popBackStack() },
+                onWakeUp = { id -> navController.navigate(Screen.WakeUp.withId(id)) },
             )
         }
 

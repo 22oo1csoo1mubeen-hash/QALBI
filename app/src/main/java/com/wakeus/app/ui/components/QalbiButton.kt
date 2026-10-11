@@ -64,11 +64,12 @@ fun QalbiOutlinedButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
     enabled: Boolean = true,
 ) {
     OutlinedButton(
-        onClick  = onClick,
-        enabled  = enabled,
+        onClick  = { if (!isLoading && enabled) onClick() },
+        enabled  = enabled && !isLoading,
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp),
@@ -80,7 +81,15 @@ fun QalbiOutlinedButton(
             width = 1.dp,
         ),
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge)
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                color    = MaterialTheme.colorScheme.primary,
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Text(text, style = MaterialTheme.typography.labelLarge)
+        }
     }
 }
 

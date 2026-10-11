@@ -90,7 +90,56 @@ class UserRepository(
                 // 2. Create user profile document
                 val userDocRef = firestore.collection("users").document(user.id)
                 transaction.set(userDocRef, user.toMap())
+
+                // 3. Create minimal public profile for friend pairing
+                val publicProfile = com.wakeus.app.data.model.PublicProfile(
+                    uid = user.id,
+                    displayName = user.displayName,
+                    username = user.username,
+                    usernameNormalized = user.usernameNormalized,
+                )
+                val publicDocRef = firestore.collection("publicProfiles").document(user.id)
+                transaction.set(publicDocRef, publicProfile.toMap())
             }.await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Retrieves the minimal public profile for [uid] without accessing sensitive fields.
+     */
+    suspend fun getPublicProfile(uid: String): Result<com.wakeus.app.data.model.PublicProfile?> {
+        val firestore = firestoreProvider() ?: return Result.failure(FirebaseNotConfiguredException())
+        return try {
+            val doc = firestore.collection("publicProfiles").document(uid).get().await()
+            if (doc.exists() && doc.data != null) {
+                Result.success(com.wakeus.app.data.model.PublicProfile.fromMap(uid, doc.data!!))
+            } else {
+                Result.success(null)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Ensures that the public profile exists for an existing authenticated user.
+     */
+    suspend fun ensurePublicProfile(user: User): Result<Unit> {
+        val firestore = firestoreProvider() ?: return Result.failure(FirebaseNotConfiguredException())
+        return try {
+            val publicProfile = com.wakeus.app.data.model.PublicProfile(
+                uid = user.id,
+                displayName = user.displayName,
+                username = user.username,
+                usernameNormalized = user.usernameNormalized,
+            )
+            firestore.collection("publicProfiles")
+                .document(user.id)
+                .set(publicProfile.toMap())
+                .await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -106,8 +155,10 @@ class UserRepository(
             firestore.runTransaction { transaction ->
                 val usernameDocRef = firestore.collection("usernames").document(usernameNormalized)
                 val userDocRef = firestore.collection("users").document(uid)
+                val publicDocRef = firestore.collection("publicProfiles").document(uid)
                 transaction.delete(usernameDocRef)
                 transaction.delete(userDocRef)
+                transaction.delete(publicDocRef)
             }.await()
             Result.success(Unit)
         } catch (e: Exception) {

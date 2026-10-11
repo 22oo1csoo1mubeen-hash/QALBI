@@ -77,31 +77,212 @@ data class User(
 
 /**
  * Represents a connected friend.
- * [isDemo] is always true in Phase 1 — no real pairing exists yet.
  */
 data class Friend(
     val id: String,
     val displayName: String,
     val username: String,
     /** Initials shown when no avatar URL is available. */
-    val initials: String,
-    /** Status string shown in the UI (e.g. "Away", "Active"). */
-    val status: String = "Demo",
-    /** Always true in Phase 1. Signals that this is mock/demo data. */
-    val isDemo: Boolean = true,
+    val initials: String = displayName.split(" ")
+        .mapNotNull { it.firstOrNull()?.uppercase() }
+        .take(2)
+        .joinToString("")
+        .ifEmpty { username.take(2).uppercase() },
+    /** Status string shown in the UI (e.g. "Connected", "Away"). */
+    val status: String = "Connected",
+    /** True only for simulated mock/demo friends. */
+    val isDemo: Boolean = false,
+    /** Deterministic connection ID in Firestore. */
+    val connectionId: String = "",
+    val connectedAt: Long = System.currentTimeMillis(),
 )
 
-/** Represents the result of a wake-up request. Always simulated in Phase 1. */
+/**
+ * Minimal public profile representation for friend discovery and pairing.
+ * Omits private fields such as email, account type, and settings.
+ */
+data class PublicProfile(
+    val uid: String,
+    val displayName: String,
+    val username: String,
+    val usernameNormalized: String = username.lowercase().trim(),
+    val updatedAt: Long = System.currentTimeMillis(),
+) {
+    fun toMap(): Map<String, Any?> = mapOf(
+        "uid" to uid,
+        "displayName" to displayName,
+        "username" to username,
+        "usernameNormalized" to usernameNormalized,
+        "updatedAt" to com.google.firebase.Timestamp(java.util.Date(updatedAt)),
+    )
+
+    companion object {
+        fun fromMap(uid: String, data: Map<String, Any?>): PublicProfile {
+            val displayName = data["displayName"] as? String ?: ""
+            val username = data["username"] as? String ?: ""
+            val usernameNormalized = data["usernameNormalized"] as? String ?: username.lowercase().trim()
+            val updatedAt = when (val u = data["updatedAt"]) {
+                is com.google.firebase.Timestamp -> u.toDate().time
+                is Number -> u.toLong()
+                else -> System.currentTimeMillis()
+            }
+            return PublicProfile(uid, displayName, username, usernameNormalized, updatedAt)
+        }
+    }
+}
+
+/** Status lifecycle of a temporary pairing code. */
+enum class PairingCodeStatus {
+    ACTIVE,
+    REDEEMED,
+    REVOKED,
+    EXPIRED,
+}
+
+/**
+ * Temporary, expiring friend pairing code.
+ */
+data class PairingCode(
+    val code: String,
+    val creatorUid: String,
+    val creatorDisplayName: String,
+    val creatorUsername: String,
+    val status: PairingCodeStatus = PairingCodeStatus.ACTIVE,
+    val createdAt: Long = System.currentTimeMillis(),
+    val expiresAt: Long = System.currentTimeMillis() + 10 * 60 * 1000L,
+    val redeemedBy: String? = null,
+    val redeemedAt: Long? = null,
+    val revokedAt: Long? = null,
+    val schemaVersion: Int = 1,
+) {
+    val isExpired: Boolean get() = System.currentTimeMillis() >= expiresAt
+    val remainingMinutes: Long get() = ((expiresAt - System.currentTimeMillis()) / 60000L).coerceAtLeast(0)
+
+    fun toMap(): Map<String, Any?> = mapOf(
+        "code" to code,
+        "creatorUid" to creatorUid,
+        "creatorDisplayName" to creatorDisplayName,
+        "creatorUsername" to creatorUsername,
+        "status" to status.name,
+        "createdAt" to com.google.firebase.Timestamp(java.util.Date(createdAt)),
+        "expiresAt" to com.google.firebase.Timestamp(java.util.Date(expiresAt)),
+        "redeemedBy" to redeemedBy,
+        "redeemedAt" to (redeemedAt?.let { com.google.firebase.Timestamp(java.util.Date(it)) }),
+        "revokedAt" to (revokedAt?.let { com.google.firebase.Timestamp(java.util.Date(it)) }),
+        "schemaVersion" to schemaVersion,
+    )
+
+    companion object {
+        fun fromMap(code: String, data: Map<String, Any?>): PairingCode {
+            val creatorUid = data["creatorUid"] as? String ?: ""
+            val creatorDisplayName = data["creatorDisplayName"] as? String ?: ""
+            val creatorUsername = data["creatorUsername"] as? String ?: ""
+            val statusStr = data["status"] as? String ?: PairingCodeStatus.ACTIVE.name
+            val status = try {
+                PairingCodeStatus.valueOf(statusStr)
+            } catch (_: Exception) {
+                PairingCodeStatus.ACTIVE
+            }
+            val createdAt = when (val c = data["createdAt"]) {
+                is com.google.firebase.Timestamp -> c.toDate().time
+                is Number -> c.toLong()
+                else -> System.currentTimeMillis()
+            }
+            val expiresAt = when (val e = data["expiresAt"]) {
+                is com.google.firebase.Timestamp -> e.toDate().time
+                is Number -> e.toLong()
+                else -> createdAt + 10 * 60 * 1000L
+            }
+            val redeemedBy = data["redeemedBy"] as? String
+            val redeemedAt = (data["redeemedAt"] as? com.google.firebase.Timestamp)?.toDate()?.time
+            val revokedAt = (data["revokedAt"] as? com.google.firebase.Timestamp)?.toDate()?.time
+            val schemaVersion = (data["schemaVersion"] as? Number)?.toInt() ?: 1
+
+            return PairingCode(
+                code = code,
+                creatorUid = creatorUid,
+                creatorDisplayName = creatorDisplayName,
+                creatorUsername = creatorUsername,
+                status = status,
+                createdAt = createdAt,
+                expiresAt = expiresAt,
+                redeemedBy = redeemedBy,
+                redeemedAt = redeemedAt,
+                revokedAt = revokedAt,
+                schemaVersion = schemaVersion,
+            )
+        }
+    }
+}
+
+/**
+ * Represents an established, bidirectional friend connection document in Firestore.
+ */
+data class Connection(
+    val connectionId: String,
+    val memberUids: List<String>,
+    val user1Uid: String,
+    val user2Uid: String,
+    val createdFromPairingCode: String,
+    val createdAt: Long = System.currentTimeMillis(),
+    val status: String = "CONNECTED",
+    val schemaVersion: Int = 1,
+) {
+    fun getOtherUid(currentUid: String): String {
+        return if (memberUids.getOrNull(0) == currentUid) {
+            memberUids.getOrNull(1) ?: ""
+        } else {
+            memberUids.getOrNull(0) ?: ""
+        }
+    }
+
+    companion object {
+        /**
+         * Generates a deterministic connection ID by lexicographically sorting user IDs.
+         * Guarantees exactly one document between any two users.
+         */
+        fun createDeterministicId(uidA: String, uidB: String): String {
+            return if (uidA < uidB) "${uidA}_${uidB}" else "${uidB}_${uidA}"
+        }
+
+        fun fromMap(id: String, data: Map<String, Any?>): Connection {
+            @Suppress("UNCHECKED_CAST")
+            val memberUids = data["memberUids"] as? List<String> ?: emptyList()
+            val user1Uid = data["user1Uid"] as? String ?: memberUids.getOrNull(0) ?: ""
+            val user2Uid = data["user2Uid"] as? String ?: memberUids.getOrNull(1) ?: ""
+            val createdFromPairingCode = data["createdFromPairingCode"] as? String ?: ""
+            val createdAt = when (val c = data["createdAt"]) {
+                is com.google.firebase.Timestamp -> c.toDate().time
+                is Number -> c.toLong()
+                else -> System.currentTimeMillis()
+            }
+            val status = data["status"] as? String ?: "CONNECTED"
+            val schemaVersion = (data["schemaVersion"] as? Number)?.toInt() ?: 1
+
+            return Connection(
+                connectionId = id,
+                memberUids = memberUids,
+                user1Uid = user1Uid,
+                user2Uid = user2Uid,
+                createdFromPairingCode = createdFromPairingCode,
+                createdAt = createdAt,
+                status = status,
+                schemaVersion = schemaVersion,
+            )
+        }
+    }
+}
+
+/** Represents the result of a wake-up request. */
 enum class WakeUpState {
     IDLE,
     PENDING,
-    SENT_DEMO,    // Simulated send — not a real notification.
+    SENT_DEMO,
     UNAVAILABLE,
 }
 
-/** Connection code wrapper. Always a demo code in Phase 1. */
+/** Connection code wrapper for UI consumption. */
 data class ConnectionCode(
     val code: String,
-    /** Human-readable expiry label shown in the UI. Always "Demo — not redeemable". */
-    val expiryLabel: String = "Demo — not redeemable on any server",
+    val expiryLabel: String = "Expires in 10 minutes",
 )
