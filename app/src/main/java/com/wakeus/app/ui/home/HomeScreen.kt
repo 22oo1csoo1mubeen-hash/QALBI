@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.WifiOff
@@ -117,20 +118,35 @@ fun HomeScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            // ── Incoming Wake-Up Alert (if any active requests) ─────────────
-            incomingRequests.firstOrNull()?.let { req ->
+            // ── Incoming Wake-Up Alert (if ringing or active requests) ───────
+            val alarmState by com.wakeus.app.data.alarm.WakeUpAlarmManager.alarmState.collectAsState()
+            val activeReq = incomingRequests.firstOrNull() ?: if (alarmState.isRinging && alarmState.requestId != null) {
+                // If alarm is ringing for a request, construct fallback summary
+                com.wakeus.app.data.model.WakeUpRequest(
+                    requestId = alarmState.requestId ?: "",
+                    senderUid = alarmState.senderUid ?: "",
+                    senderDisplayName = alarmState.senderDisplayName ?: "Your friend",
+                    senderUsername = alarmState.senderUsername ?: "friend",
+                    receiverUid = user.id,
+                    receiverDisplayName = user.displayName,
+                    receiverUsername = user.username,
+                    connectionId = "",
+                )
+            } else null
+
+            activeReq?.let { req ->
                 Spacer(Modifier.height(16.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(MaterialTheme.shapes.medium)
-                        .background(SubtleGold.copy(alpha = 0.18f))
+                        .background(if (alarmState.isRinging) MutedRose.copy(alpha = 0.28f) else SubtleGold.copy(alpha = 0.18f))
                         .clickable { onIncomingRequest(req.requestId) }
                         .padding(16.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector        = Icons.Filled.Favorite,
+                            imageVector        = if (alarmState.isRinging) Icons.Filled.Alarm else Icons.Filled.Favorite,
                             contentDescription = null,
                             tint               = SubtleGold,
                             modifier           = Modifier.size(32.dp),
@@ -138,12 +154,12 @@ fun HomeScreen(
                         Spacer(Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text  = "${req.senderDisplayName} is waking you up! \u2600\uFE0F",
+                                text  = "${req.senderDisplayName} is waking you up! ☀️",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onBackground,
                             )
                             Text(
-                                text  = "Tap here to answer: I'm Awake!",
+                                text  = if (alarmState.isRinging) "🔔 ALARM RINGING — Tap to respond: I'm Awake!" else "Tap here to answer: I'm Awake!",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = SubtleGold,
                             )

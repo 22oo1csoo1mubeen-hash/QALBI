@@ -1,6 +1,7 @@
 package com.wakeus.app.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -74,14 +76,49 @@ fun SettingsScreen(
             Spacer(Modifier.height(20.dp))
 
             // ── Alarm Settings section ────────────────────────────────────────
-            SettingsSectionHeader(title = "Alarm Settings (Preview)")
+            val context = androidx.compose.ui.platform.LocalContext.current
+            var isPreviewingSound by remember { mutableStateOf(false) }
+
+            SettingsSectionHeader(title = "Alarm & Audio")
 
             QalbiCard(modifier = Modifier.fillMaxWidth()) {
-                SettingsRowPlaceholder(
-                    icon  = Icons.Filled.MusicNote,
-                    title = "Ringtone",
-                    value = "Default — selection coming in Phase 4",
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (isPreviewingSound) {
+                                com.wakeus.app.data.alarm.AlarmSoundPlayer.stop()
+                                isPreviewingSound = false
+                            } else {
+                                val started = com.wakeus.app.data.alarm.AlarmSoundPlayer.preview(context) {
+                                    isPreviewingSound = false
+                                }
+                                isPreviewingSound = started
+                            }
+                        }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = if (isPreviewingSound) Icons.Filled.NotificationsOff else Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        tint = SubtleGold,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Acoustic Chime (QALBI Original)",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = if (isPreviewingSound) "Playing preview… Tap to stop" else "Tap to preview bundled alarm sound",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isPreviewingSound) SubtleGold else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 12.dp),
                     color    = MaterialTheme.colorScheme.outline,
@@ -99,19 +136,19 @@ fun SettingsScreen(
                 SettingsRowPlaceholder(
                     icon  = Icons.Filled.AlarmOff,
                     title = "Alarm Duration",
-                    value = "30 seconds — adjustable in Phase 4",
+                    value = "15 minutes maximum validity",
                 )
             }
 
             Spacer(Modifier.height(20.dp))
 
             // ── Notifications section ─────────────────────────────────────────
-            SettingsSectionHeader(title = "Notifications (Preview)")
+            SettingsSectionHeader(title = "Notifications & Lockscreen")
             QalbiCard(modifier = Modifier.fillMaxWidth()) {
                 SettingsRowPlaceholder(
-                    icon  = Icons.Filled.NotificationsOff,
-                    title = "Notification Permission",
-                    value = "Not requested in Phase 1",
+                    icon  = Icons.Filled.MusicNote,
+                    title = "Full-Screen Wake Alert",
+                    value = "Shows over lockscreen when alarm is triggered",
                 )
             }
 

@@ -1,7 +1,11 @@
 package com.wakeus.app.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wakeus.app.data.alarm.AlarmState
+import com.wakeus.app.data.alarm.LocalAlarmStatus
+import com.wakeus.app.data.alarm.WakeUpAlarmManager
 import com.wakeus.app.data.model.WakeUpRequest
 import com.wakeus.app.data.model.WakeUpRequestStatus
 import com.wakeus.app.data.repository.QalbiRepository
@@ -24,7 +28,9 @@ class IncomingRequestViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(IncomingRequestUiState())
     val uiState: StateFlow<IncomingRequestUiState> = _uiState.asStateFlow()
 
-    fun loadRequest(requestId: String) {
+    val alarmState: StateFlow<AlarmState> = WakeUpAlarmManager.alarmState
+
+    fun loadRequest(context: Context, requestId: String) {
         if (requestId.isBlank()) return
 
         viewModelScope.launch {
@@ -36,23 +42,37 @@ class IncomingRequestViewModel : ViewModel() {
                         request = req,
                     )
                 }
+
+                // If request is pending and unexpired, ensure alarm is ringing
+                if (req != null && req.status == WakeUpRequestStatus.PENDING && !req.isExpired) {
+                    if (alarmState.value.status != LocalAlarmStatus.RINGING) {
+                        WakeUpAlarmManager.startAlarm(
+                            context = context,
+                            requestId = req.requestId,
+                            senderUid = req.senderUid,
+                            senderDisplayName = req.senderDisplayName,
+                            senderUsername = req.senderUsername,
+                            expiresAt = req.expiresAt
+                        )
+                    }
+                }
             }
         }
     }
 
-    fun acknowledge(onDone: () -> Unit = {}) {
+    fun acknowledge(context: Context, onDone: () -> Unit = {}) {
         val requestId = _uiState.value.request?.requestId ?: return
         if (_uiState.value.isResponding) return
 
         _uiState.update { it.copy(isResponding = true, errorMessage = null) }
-        viewModelScope.launch {
-            val result = QalbiRepository.acknowledgeWakeUp(requestId)
+
+        WakeUpAlarmManager.acknowledgeAlarm(context, requestId) { result ->
             result.fold(
                 onSuccess = {
                     _uiState.update {
                         it.copy(
                             isResponding = false,
-                            actionSuccessMessage = "You let them know you're awake! \u2600\uFE0F",
+                            actionSuccessMessage = "You let them know you're awake! ☀️",
                         )
                     }
                     onDone()
@@ -69,13 +89,13 @@ class IncomingRequestViewModel : ViewModel() {
         }
     }
 
-    fun decline(onDone: () -> Unit = {}) {
+    fun decline(context: Context, onDone: () -> Unit = {}) {
         val requestId = _uiState.value.request?.requestId ?: return
         if (_uiState.value.isResponding) return
 
         _uiState.update { it.copy(isResponding = true, errorMessage = null) }
-        viewModelScope.launch {
-            val result = QalbiRepository.declineWakeUp(requestId)
+
+        WakeUpAlarmManager.declineAlarm(context, requestId) { result ->
             result.fold(
                 onSuccess = {
                     _uiState.update {

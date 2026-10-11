@@ -52,12 +52,17 @@ class QalbiMessagingService : FirebaseMessagingService() {
             return
         }
 
+        val senderUid = data["senderUid"] ?: ""
+        val expiresAt = data["expiresAt"]?.toLongOrNull() ?: (System.currentTimeMillis() + 15 * 60 * 1000L)
+
         if (!requestId.isNullOrBlank()) {
-            NotificationHelper.showWakeUpNotification(
+            com.wakeus.app.data.alarm.WakeUpAlarmManager.startAlarm(
                 context = applicationContext,
                 requestId = requestId,
+                senderUid = senderUid,
                 senderDisplayName = senderDisplayName,
-                senderUsername = senderUsername
+                senderUsername = senderUsername,
+                expiresAt = expiresAt
             )
         }
     }

@@ -7,6 +7,7 @@ import com.wakeus.app.data.model.WakeUpState
 import com.wakeus.app.data.auth.AuthRepository
 import com.wakeus.app.data.user.UserRepository
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -137,6 +138,17 @@ object QalbiRepository {
     }
 
     fun logout(): Result<Unit> {
+        val currentUser = (authState.value as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user
+        if (currentUser != null) {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                try {
+                    fcmTokenRepository.unregisterDeviceToken(currentUser.id)
+                } catch (_: Exception) {}
+            }
+        }
+        com.wakeus.app.data.alarm.AlarmSoundPlayer.stop()
+        com.wakeus.app.data.alarm.AlarmVibrator.stop()
+        com.wakeus.app.data.alarm.WakeLockHelper.release()
         return authRepository.logout()
     }
 

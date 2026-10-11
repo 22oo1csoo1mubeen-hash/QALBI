@@ -20,7 +20,16 @@ QALBI (Arabic: قلبي, "my heart") is a native Android application that lets c
   - Android 13+ `POST_NOTIFICATIONS` runtime permission launcher and deep-link handling.
   - Trusted zero-cost FCM push dispatcher (`backend/fcm-dispatcher/dispatcher.js`) using Firebase Admin SDK.
   - Unit test suite (`WakeUpCommunicationTest`) verifying state transitions, duplicate prevention, and authorization.
-  - Updated Firestore security rules for request immutability and token privacy.
+- **Phase 5**: Complete Alarm Engine under strict ₹0 Spark plan:
+  - Looping native alarm audio playback with dedicated `USAGE_ALARM` audio focus and original bundled chime asset (`res/raw/qalbi_alarm.wav`).
+  - Controlled rhythmic vibration with hardware capability detection (`AlarmVibrator`).
+  - Android Foreground Service (`WakeUpAlarmService`) with persistent notification and full-screen intent.
+  - Lockscreen wake-up presentation via `setShowWhenLocked`, `setTurnScreenOn`, and `USE_FULL_SCREEN_INTENT`.
+  - Dedicated alarm UI with visual animated pulse, "☀️ I'M AWAKE!" action, and "Decline".
+  - Safe stop sequence: immediate hardware silencing on tap with atomic Firestore status confirmation.
+  - Remote cancellation and expiry observer: stops ringing immediately if sender cancels or request expires.
+  - Sound preview feature in Settings (`SettingsScreen`).
+  - Comprehensive unit test suite (`AlarmEngineTest`).
 
 ---
 
@@ -93,7 +102,8 @@ The output APK is generated at:
 | Firebase Authentication & Profiles | Phase 2 | ✅ Complete |
 | Firestore Friend Pairing | Phase 3 | ✅ Complete |
 | FCM Remote Wake-Up Communication | Phase 4 | ✅ Complete |
-| Looping Alarm Engine & Polish | Phase 5 | Upcoming |
+| Complete Alarm Engine | Phase 5 | ✅ Complete |
+| Polish, Avatars & Production Release | Phase 6 | Upcoming |
 
 ---
 

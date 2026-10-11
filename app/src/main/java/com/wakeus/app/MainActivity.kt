@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        configureLockScreenPresentation()
         requestNotificationPermission()
         pendingRequestId = extractRequestId(intent)
 
@@ -77,9 +78,23 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        configureLockScreenPresentation()
         val newRequestId = extractRequestId(intent)
         if (!newRequestId.isNullOrBlank()) {
             pendingRequestId = newRequestId
+        }
+    }
+
+    private fun configureLockScreenPresentation() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
         }
     }
 
