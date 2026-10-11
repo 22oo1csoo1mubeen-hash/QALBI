@@ -116,6 +116,7 @@ fun AppNavigation(
             ConnectedFriendsScreen(
                 onBack           = { navController.popBackStack() },
                 onFriendSelected = { id -> navController.navigate(Screen.FriendDetail.withId(id)) },
+                onConnectFriend  = { navController.navigate(Screen.ConnectFriend.route) },
             )
         }
 

@@ -5,12 +5,13 @@
         <item name="android:windowBackground">@color/splash_background</item>
         <item name="android:statusBarColor">@color/splash_background</item>
         <item name="android:navigationBarColor">@color/splash_background</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
     <!-- Splash screen theme using core-splashscreen library -->
     <style name="Theme.Qalbi.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_qalbi_splash</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
         <item name="windowSplashScreenAnimationDuration">400</item>
         <item name="postSplashScreenTheme">@style/Theme.Qalbi</item>
     </style>

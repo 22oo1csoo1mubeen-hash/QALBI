@@ -1,79 +1,55 @@
 package com.wakeus.app.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-// ─── Dark colour scheme ──────────────────────────────────────────────────────
-private val QalbiDarkColorScheme = darkColorScheme(
-    primary           = SubtleGold,
-    onPrimary         = MidnightBlue,
-    primaryContainer  = SubtleGoldDark,
-    onPrimaryContainer = WarmIvory,
+// ─── QALBI Romantic Unified Theme ──────────────────────────────────────────
+// Entire application uses romantic palette: warm ivory, blush pink, and rich wine.
 
-    secondary           = MutedRose,
-    onSecondary         = MidnightBlue,
-    secondaryContainer  = MutedRoseDark,
-    onSecondaryContainer = WarmIvory,
+private val QalbiRomanticColorScheme = lightColorScheme(
+    primary             = RomanticWine,
+    onPrimary           = Color.White,
+    primaryContainer    = RomanticBlush,
+    onPrimaryContainer  = RomanticWineDeep,
 
-    tertiary           = MutedRoseLight,
-    onTertiary         = MidnightBlue,
-    tertiaryContainer  = MutedRoseDark,
-    onTertiaryContainer = WarmIvory,
+    secondary           = RomanticRose,
+    onSecondary         = Color.White,
+    secondaryContainer  = RomanticBlush,
+    onSecondaryContainer = RomanticWine,
 
-    background  = MidnightBlue,
-    onBackground = WarmIvory,
+    tertiary            = RomanticRoseLight,
+    onTertiary          = Color.White,
+    tertiaryContainer   = RomanticBlush,
+    onTertiaryContainer = RomanticWine,
 
-    surface        = MidnightBlueSurface,
-    onSurface      = WarmIvory,
-    surfaceVariant  = MidnightBlueLight,
-    onSurfaceVariant = IvoryMuted,
+    background          = RomanticWarmBg,
+    onBackground        = RomanticDarkText,
 
-    outline       = DividerColor,
-    outlineVariant = DividerColor,
+    surface             = RomanticCardBg,
+    onSurface           = RomanticDarkText,
+    surfaceVariant      = RomanticBlush,
+    onSurfaceVariant    = RomanticMutedText,
 
-    error   = ErrorRed,
-    onError = WarmIvory,
-    errorContainer  = MutedRoseDark,
-    onErrorContainer = WarmIvory,
+    outline             = RomanticBlushBorder,
+    outlineVariant      = RomanticDivider,
 
-    scrim = ScrimColor,
-)
+    error               = ErrorRed,
+    onError             = Color.White,
+    errorContainer      = Color(0xFFFDE8E8),
+    onErrorContainer    = ErrorRed,
 
-// ─── Light colour scheme ─────────────────────────────────────────────────────
-// QALBI is primarily dark-themed; light scheme is provided for completeness.
-private val QalbiLightColorScheme = lightColorScheme(
-    primary           = SubtleGoldDark,
-    onPrimary         = WarmIvory,
-    primaryContainer  = SubtleGoldLight,
-    onPrimaryContainer = MidnightBlue,
-
-    secondary           = MutedRoseDark,
-    onSecondary         = WarmIvory,
-    secondaryContainer  = MutedRoseLight,
-    onSecondaryContainer = MidnightBlue,
-
-    background   = Color(0xFFF8F2EA),
-    onBackground = MidnightBlue,
-
-    surface      = Color(0xFFFFFFFF),
-    onSurface    = MidnightBlue,
-
-    error   = ErrorRed,
-    onError = WarmIvory,
+    scrim               = ScrimColor,
 )
 
 @Composable
 fun QalbiTheme(
-    darkTheme: Boolean = true, // QALBI defaults to dark
+    @Suppress("UNUSED_PARAMETER") darkTheme: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = if (darkTheme) QalbiDarkColorScheme else QalbiLightColorScheme
-
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = QalbiRomanticColorScheme,
         typography  = QalbiTypography,
         content     = content,
     )

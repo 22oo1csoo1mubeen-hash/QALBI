@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Midnight blue base -->
-    <color name="splash_background">#0D1B2A</color>
-    <!-- Warm ivory -->
-    <color name="cream">#F5EFE6</color>
-    <!-- Muted rose -->
+    <!-- Warm ivory romantic background matching Logo.png -->
+    <color name="splash_background">#FEF8F7</color>
+    <color name="ic_launcher_background">#FEF8F7</color>
+    <!-- Romantic palette -->
+    <color name="cream">#FBF6F3</color>
     <color name="rose">#C87B8B</color>
-    <!-- Subtle gold -->
-    <color name="gold">#C9A84C</color>
+    <color name="wine">#80243C</color>
 </resources>

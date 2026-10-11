@@ -34,4 +34,14 @@
     <string name="cd_friend_avatar">Friend avatar</string>
     <string name="cd_password_toggle">Toggle password visibility</string>
     <string name="cd_back">Navigate back</string>
+
+    <!-- Landing screen redesign strings -->
+    <string name="landing_wordmark">Q A L B I</string>
+    <string name="landing_headline">A little love,\neven from afar.</string>
+    <string name="landing_subtitle">Wake the people who matter,\nwherever life keeps you.</string>
+    <string name="landing_main_message">Wake the people you love — gently, remotely, and without exchanging numbers.</string>
+    <string name="landing_privacy_no_phone">No phone numbers exchanged</string>
+    <string name="landing_privacy_codes">Private invitation-code connections</string>
+    <string name="landing_footer_prefix">A gentle way to say, </string>
+    <string name="landing_footer_accent">I\'m here for you.</string>
 </resources>
