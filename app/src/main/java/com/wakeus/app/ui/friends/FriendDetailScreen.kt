@@ -147,18 +147,22 @@ fun FriendDetailScreen(
 
             val friend = uiState.friend
             if (friend != null) {
+                val avatarColor = androidx.compose.ui.graphics.Color(
+                    com.wakeus.app.data.model.AvatarPreset.getColor(friend.avatarStyle)
+                )
+
                 // Large Initials Avatar
                 Box(
                     modifier = Modifier
                         .size(88.dp)
                         .clip(CircleShape)
-                        .background(MutedRose),
+                        .background(avatarColor),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text  = friend.initials,
                         style = MaterialTheme.typography.headlineLarge,
-                        color = MaterialTheme.colorScheme.onSecondary,
+                        color = MidnightBlue,
                     )
                 }
 

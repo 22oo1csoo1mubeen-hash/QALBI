@@ -12,5 +12,7 @@ class QalbiApp : Application() {
         super.onCreate()
         // Phase 4: Create high-priority notification channels for wake-up requests
         com.wakeus.app.data.fcm.NotificationHelper.createNotificationChannel(this)
+        // Phase 6: Initialize real-time network connectivity monitor
+        com.wakeus.app.data.network.NetworkMonitor.initialize(this)
     }
 }

@@ -1,8 +1,15 @@
 package com.wakeus.app.ui.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.graphics.Color
+import com.wakeus.app.data.model.AvatarPreset
+import com.wakeus.app.ui.theme.SubtleGold
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -81,12 +88,16 @@ fun ProfileScreen(
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             } else {
+                val avatarColor = androidx.compose.ui.graphics.Color(
+                    com.wakeus.app.data.model.AvatarPreset.getColor(user?.avatarStyle)
+                )
+
                 // Avatar
                 Box(
                     modifier         = Modifier
                         .size(88.dp)
                         .clip(CircleShape)
-                        .background(MutedRose),
+                        .background(avatarColor),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -107,7 +118,43 @@ fun ProfileScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(14.dp))
+
+                // Avatar palette selector
+                Text(
+                    text  = "Avatar Theme",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = SubtleGold,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                ) {
+                    AvatarPreset.PRESETS.forEach { preset ->
+                        val isSelected = (user?.avatarStyle ?: "ROSE").equals(preset.id, ignoreCase = true)
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color(preset.colorHex))
+                                .then(
+                                    if (isSelected) {
+                                        Modifier.border(
+                                            width = 2.5.dp,
+                                            color = Color.White,
+                                            shape = CircleShape
+                                        )
+                                    } else Modifier
+                                )
+                                .clickable {
+                                    viewModel.updateAvatarStyle(preset.id)
+                                }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
 
                 // Profile details card
                 QalbiCard(modifier = Modifier.fillMaxWidth()) {

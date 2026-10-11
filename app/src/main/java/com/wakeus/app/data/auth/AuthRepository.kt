@@ -87,6 +87,15 @@ class AuthRepository(
         auth.addAuthStateListener(authListener!!)
     }
 
+    /**
+     * Updates the in-memory authenticated user session.
+     */
+    fun updateCurrentUser(updatedUser: User) {
+        if (_authState.value is AuthState.Authenticated) {
+            _authState.value = AuthState.Authenticated(updatedUser)
+        }
+    }
+
     private suspend fun loadUserProfile(firebaseUser: FirebaseUser) {
         val profileResult = userRepository.getUserProfile(firebaseUser.uid)
         profileResult.fold(

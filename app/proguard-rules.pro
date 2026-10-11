@@ -1,21 +1,23 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# QALBI — Production ProGuard & R8 Optimization Rules
+# Ensures safe reflection, Coroutines stability, and data model preservation
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Preserve Line Numbers and Source File for intelligible crash reports
+-keepattributes SourceFile,LineNumberTable
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# ── Data Models ──────────────────────────────────────────────────────────────
+# Keep data models used with Firestore serialization and mapping
+-keep class com.wakeus.app.data.model.** { *; }
+-keepclassmembers class com.wakeus.app.data.model.** { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# ── Kotlin Coroutines ─────────────────────────────────────────────────────────
+-keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
+-keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
+-dontwarn kotlinx.coroutines.**
+
+# ── Firebase Components ───────────────────────────────────────────────────────
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
+
+# ── Android Foreground Service & Receivers ────────────────────────────────────
+-keep class com.wakeus.app.data.alarm.WakeUpAlarmService { *; }
+-keep class com.wakeus.app.data.fcm.QalbiMessagingService { *; }

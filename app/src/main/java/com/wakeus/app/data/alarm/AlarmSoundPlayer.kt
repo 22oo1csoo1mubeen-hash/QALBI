@@ -10,6 +10,11 @@ import android.net.Uri
 import android.os.Build
 import android.util.Log
 import com.wakeus.app.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Lifecycle-aware, robust alarm sound playback engine.
@@ -25,6 +30,7 @@ object AlarmSoundPlayer {
     private var audioFocusRequest: AudioFocusRequest? = null
     private var isPlayingAlarm = false
     private var isPlayingPreview = false
+    private var volumeRampJob: kotlinx.coroutines.Job? = null
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -63,10 +69,30 @@ object AlarmSoundPlayer {
 
         return try {
             val player = createConfiguredPlayer(appContext, isLooping = true)
+            val gentleRamp = AlarmPreferences.isGentleVolumeRamp(appContext)
+            if (gentleRamp) {
+                player.setVolume(0.15f, 0.15f)
+            }
             player.start()
             mediaPlayer = player
             isPlayingAlarm = true
-            Log.d(TAG, "Alarm sound playback successfully started.")
+
+            if (gentleRamp) {
+                volumeRampJob?.cancel()
+                volumeRampJob = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+                    for (step in 1..10) {
+                        kotlinx.coroutines.delay(1500)
+                        val vol = (0.15f + (step / 10f) * 0.85f).coerceAtMost(1.0f)
+                        try {
+                            mediaPlayer?.setVolume(vol, vol)
+                        } catch (_: Exception) {
+                            break
+                        }
+                    }
+                }
+            }
+
+            Log.d(TAG, "Alarm sound playback successfully started. Gentle ramp: $gentleRamp")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start alarm sound playback", e)
@@ -125,6 +151,8 @@ object AlarmSoundPlayer {
         } catch (e: Exception) {
             Log.w(TAG, "Error stopping media player", e)
         } finally {
+            volumeRampJob?.cancel()
+            volumeRampJob = null
             mediaPlayer = null
             isPlayingAlarm = false
             isPlayingPreview = false
@@ -142,10 +170,9 @@ object AlarmSoundPlayer {
             .build()
 
         // 1. Try bundled raw asset (qalbi_alarm.wav)
-        var player: MediaPlayer? = null
-        try {
+        var player: MediaPlayer? = try {
             val assetUri = Uri.parse("android.resource://${context.packageName}/${R.raw.qalbi_alarm}")
-            player = MediaPlayer().apply {
+            MediaPlayer().apply {
                 setAudioAttributes(audioAttributes)
                 setDataSource(context, assetUri)
                 this.isLooping = isLooping
@@ -153,7 +180,7 @@ object AlarmSoundPlayer {
             }
         } catch (e: Exception) {
             Log.w(TAG, "Bundled raw chime failed to load. Falling back to default system alarm.", e)
-            player = null
+            null
         }
 
         // 2. Fallback to system default alarm or notification ringtone

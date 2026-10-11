@@ -19,6 +19,7 @@ data class User(
     val usernameNormalized: String = username.lowercase().trim(),
     val email: String? = null,
     val accountType: AccountType = if (email.isNullOrBlank()) AccountType.USERNAME else AccountType.EMAIL,
+    val avatarStyle: String = "ROSE",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val profileVersion: Int = 1,
@@ -34,6 +35,7 @@ data class User(
             val email = data["email"] as? String
             val accountTypeStr = data["accountType"] as? String
             val accountType = if (accountTypeStr == "USERNAME") AccountType.USERNAME else AccountType.EMAIL
+            val avatarStyle = data["avatarStyle"] as? String ?: "ROSE"
             val createdAt = when (val c = data["createdAt"]) {
                 is com.google.firebase.Timestamp -> c.toDate().time
                 is Number -> c.toLong()
@@ -53,6 +55,7 @@ data class User(
                 usernameNormalized = usernameNormalized,
                 email = email,
                 accountType = accountType,
+                avatarStyle = avatarStyle,
                 createdAt = createdAt,
                 updatedAt = updatedAt,
                 profileVersion = profileVersion,
@@ -68,10 +71,35 @@ data class User(
             "usernameNormalized" to usernameNormalized,
             "email" to email,
             "accountType" to accountType.name,
+            "avatarStyle" to avatarStyle,
             "createdAt" to com.google.firebase.Timestamp(java.util.Date(createdAt)),
             "updatedAt" to com.google.firebase.Timestamp(java.util.Date(updatedAt)),
             "profileVersion" to profileVersion,
         )
+    }
+}
+
+/**
+ * Preset avatar color styles for personalized, zero-cost profile presentation.
+ */
+data class AvatarPreset(
+    val id: String,
+    val name: String,
+    val colorHex: Long,
+) {
+    companion object {
+        val PRESETS = listOf(
+            AvatarPreset("ROSE", "Warm Rose", 0xFFC87B8BL),
+            AvatarPreset("GOLD", "Subtle Gold", 0xFFC9A84CL),
+            AvatarPreset("EMERALD", "Emerald Dawn", 0xFF2A9D8FL),
+            AvatarPreset("VIOLET", "Twilight Violet", 0xFF7B2CBFL),
+            AvatarPreset("CORAL", "Sunset Coral", 0xFFE76F51L),
+            AvatarPreset("MIDNIGHT", "Midnight Glow", 0xFF4A6FA5L),
+        )
+
+        fun getColor(id: String?): Long {
+            return PRESETS.firstOrNull { it.id.equals(id, ignoreCase = true) }?.colorHex ?: 0xFFC87B8BL
+        }
     }
 }
 
@@ -88,6 +116,7 @@ data class Friend(
         .take(2)
         .joinToString("")
         .ifEmpty { username.take(2).uppercase() },
+    val avatarStyle: String = "ROSE",
     /** Status string shown in the UI (e.g. "Connected", "Away"). */
     val status: String = "Connected",
     /** True only for simulated mock/demo friends. */
@@ -106,6 +135,7 @@ data class PublicProfile(
     val displayName: String,
     val username: String,
     val usernameNormalized: String = username.lowercase().trim(),
+    val avatarStyle: String = "ROSE",
     val updatedAt: Long = System.currentTimeMillis(),
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
@@ -113,6 +143,7 @@ data class PublicProfile(
         "displayName" to displayName,
         "username" to username,
         "usernameNormalized" to usernameNormalized,
+        "avatarStyle" to avatarStyle,
         "updatedAt" to com.google.firebase.Timestamp(java.util.Date(updatedAt)),
     )
 
@@ -121,12 +152,13 @@ data class PublicProfile(
             val displayName = data["displayName"] as? String ?: ""
             val username = data["username"] as? String ?: ""
             val usernameNormalized = data["usernameNormalized"] as? String ?: username.lowercase().trim()
+            val avatarStyle = data["avatarStyle"] as? String ?: "ROSE"
             val updatedAt = when (val u = data["updatedAt"]) {
                 is com.google.firebase.Timestamp -> u.toDate().time
                 is Number -> u.toLong()
                 else -> System.currentTimeMillis()
             }
-            return PublicProfile(uid, displayName, username, usernameNormalized, updatedAt)
+            return PublicProfile(uid, displayName, username, usernameNormalized, avatarStyle, updatedAt)
         }
     }
 }

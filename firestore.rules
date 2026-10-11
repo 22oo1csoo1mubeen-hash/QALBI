@@ -13,8 +13,8 @@ service cloud.firestore {
 
     // ─── User Profile Documents: /users/{userId} ─────────────────────────────
     match /users/{userId} {
-      // Authenticated users can read profile data
-      allow read: if isAuthenticated();
+      // Owner only: Protects user's email, settings, and private account metadata from exposure
+      allow read: if isOwner(userId);
 
       // Create: user must be authenticated, creating their own UID, with no passwords/tokens
       allow create: if isOwner(userId)

@@ -75,4 +75,14 @@ class ProfileViewModel(
             _uiState.update { it.copy(isLoading = false, user = null, isLoggedOut = true) }
         }
     }
+
+    fun updateAvatarStyle(avatarStyle: String) {
+        viewModelScope.launch {
+            val currentUser = _uiState.value.user
+            if (currentUser != null) {
+                _uiState.update { it.copy(user = currentUser.copy(avatarStyle = avatarStyle)) }
+                repository.updateAvatarStyle(avatarStyle)
+            }
+        }
+    }
 }

@@ -54,6 +54,9 @@ ehthumbs.db
 *.jks
 *.keystore
 *.key
+*.p12
+*.pem
+secrets.properties
 
 # Google Services / Firebase credentials (protect API keys from public git)
 google-services.json

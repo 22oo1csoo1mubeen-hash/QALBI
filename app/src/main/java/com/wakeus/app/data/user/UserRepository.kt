@@ -165,4 +165,26 @@ class UserRepository(
             Result.failure(e)
         }
     }
+
+    /**
+     * Updates the user's avatar style in both private profile and public profile.
+     */
+    suspend fun updateAvatarStyle(uid: String, avatarStyle: String): Result<Unit> {
+        val firestore = firestoreProvider() ?: return Result.failure(FirebaseNotConfiguredException())
+        return try {
+            val userDocRef = firestore.collection("users").document(uid)
+            val publicDocRef = firestore.collection("publicProfiles").document(uid)
+            val updates = mapOf(
+                "avatarStyle" to avatarStyle,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            firestore.runBatch { batch ->
+                batch.update(userDocRef, updates)
+                batch.update(publicDocRef, updates)
+            }.await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

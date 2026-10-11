@@ -345,6 +345,7 @@ class FriendRepository(
                                         connectionId = conn.connectionId,
                                         status = "Connected",
                                         connectedAt = conn.createdAt,
+                                        avatarStyle = profile.avatarStyle,
                                         isDemo = false,
                                     )
                                 )

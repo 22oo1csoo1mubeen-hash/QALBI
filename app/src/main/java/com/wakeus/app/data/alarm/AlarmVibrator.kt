@@ -16,8 +16,8 @@ object AlarmVibrator {
 
     private const val TAG = "AlarmVibrator"
 
-    // Alarm vibration rhythm: 0ms delay, 800ms vibrate, 400ms pause, 800ms vibrate...
-    private val VIBRATION_PATTERN = longArrayOf(0, 800, 400, 800, 400, 800)
+    // Default alarm vibration rhythm: 0ms delay, 800ms vibrate, 400ms pause, 800ms vibrate...
+    private val DEFAULT_VIBRATION_PATTERN = longArrayOf(0, 800, 400, 800, 400, 800)
 
     private var activeVibrator: Vibrator? = null
     private var isVibrating = false
@@ -30,6 +30,13 @@ object AlarmVibrator {
         }
 
         val appContext = context.applicationContext
+
+        // Check user preferences
+        if (!AlarmPreferences.isVibrationEnabled(appContext)) {
+            Log.d(TAG, "Alarm vibration disabled in settings. Skipping.")
+            return false
+        }
+
         val vibrator = getVibrator(appContext)
 
         if (vibrator == null || !vibrator.hasVibrator()) {
@@ -37,23 +44,51 @@ object AlarmVibrator {
             return false
         }
 
+        val patternName = AlarmPreferences.getVibrationPattern(appContext)
+        val pattern = AlarmPreferences.getPatternWaveform(patternName)
+
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 // 0 specifies the index at which to repeat (continuous loop)
-                val effect = VibrationEffect.createWaveform(VIBRATION_PATTERN, 0)
+                val effect = VibrationEffect.createWaveform(pattern, 0)
                 vibrator.vibrate(effect)
             } else {
                 @Suppress("DEPRECATION")
-                vibrator.vibrate(VIBRATION_PATTERN, 0)
+                vibrator.vibrate(pattern, 0)
             }
 
             activeVibrator = vibrator
             isVibrating = true
-            Log.d(TAG, "Alarm vibration successfully started.")
+            Log.d(TAG, "Alarm vibration successfully started with pattern: $patternName")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start alarm vibration", e)
             false
+        }
+    }
+
+    /**
+     * Briefly vibrates to preview a chosen pattern in Settings.
+     */
+    @Synchronized
+    fun preview(context: Context, patternName: String) {
+        val appContext = context.applicationContext
+        val vibrator = getVibrator(appContext) ?: return
+        if (!vibrator.hasVibrator()) return
+
+        stop()
+        val pattern = AlarmPreferences.getPatternWaveform(patternName)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // -1 indicates no repeat (one-shot waveform)
+                val effect = VibrationEffect.createWaveform(pattern, -1)
+                vibrator.vibrate(effect)
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(pattern, -1)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to preview vibration pattern", e)
         }
     }
 

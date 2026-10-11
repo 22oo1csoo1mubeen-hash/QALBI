@@ -100,18 +100,22 @@ private fun FriendListItem(
             modifier          = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val avatarColor = androidx.compose.ui.graphics.Color(
+                com.wakeus.app.data.model.AvatarPreset.getColor(friend.avatarStyle)
+            )
+
             // Avatar with initials
             Box(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(MutedRose),
+                    .background(avatarColor),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text  = friend.initials,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSecondary,
+                    color = MidnightBlue,
                 )
             }
 

@@ -2,6 +2,8 @@ package com.wakeus.app.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,12 +14,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AlarmOff
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.HorizontalDivider
@@ -34,15 +40,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.wakeus.app.R
-import com.wakeus.app.ui.components.DemoBadge
+import com.wakeus.app.data.alarm.AlarmPreferences
+import com.wakeus.app.data.alarm.AlarmSoundPlayer
+import com.wakeus.app.data.alarm.AlarmVibrator
 import com.wakeus.app.ui.components.QalbiButton
 import com.wakeus.app.ui.components.QalbiCard
 import com.wakeus.app.ui.components.QalbiTopBar
 import com.wakeus.app.ui.theme.MidnightBlue
+import com.wakeus.app.ui.theme.MutedRose
 import com.wakeus.app.ui.theme.SubtleGold
 
 @Composable
@@ -50,8 +61,11 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onLogout: () -> Unit,
 ) {
-    // Phase 1: settings state is in-memory only — not persisted.
-    var vibrationEnabled by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    var vibrationEnabled by remember { mutableStateOf(AlarmPreferences.isVibrationEnabled(context)) }
+    var vibrationPattern by remember { mutableStateOf(AlarmPreferences.getVibrationPattern(context)) }
+    var gentleVolumeRamp by remember { mutableStateOf(AlarmPreferences.isGentleVolumeRamp(context)) }
+    var isPreviewingSound by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MidnightBlue,
@@ -64,33 +78,22 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
-            Spacer(Modifier.height(8.dp))
-            DemoBadge()
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text  = "Settings do not persist in Phase 1. These are UI previews only.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Spacer(Modifier.height(12.dp))
 
-            Spacer(Modifier.height(20.dp))
-
-            // ── Alarm Settings section ────────────────────────────────────────
-            val context = androidx.compose.ui.platform.LocalContext.current
-            var isPreviewingSound by remember { mutableStateOf(false) }
-
+            // ── Alarm & Audio section ─────────────────────────────────────────
             SettingsSectionHeader(title = "Alarm & Audio")
 
             QalbiCard(modifier = Modifier.fillMaxWidth()) {
+                // Sound Preview Row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
                             if (isPreviewingSound) {
-                                com.wakeus.app.data.alarm.AlarmSoundPlayer.stop()
+                                AlarmSoundPlayer.stop()
                                 isPreviewingSound = false
                             } else {
-                                val started = com.wakeus.app.data.alarm.AlarmSoundPlayer.preview(context) {
+                                val started = AlarmSoundPlayer.preview(context) {
                                     isPreviewingSound = false
                                 }
                                 isPreviewingSound = started
@@ -113,30 +116,97 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            text = if (isPreviewingSound) "Playing preview… Tap to stop" else "Tap to preview bundled alarm sound",
+                            text = if (isPreviewingSound) "Playing chime preview… Tap to stop" else "Tap to test bundled alarm chime",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (isPreviewingSound) SubtleGold else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
+
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 12.dp),
                     color    = MaterialTheme.colorScheme.outline,
                 )
+
+                // Gentle Volume Ramp-Up Toggle
+                SettingsRowToggle(
+                    icon    = Icons.AutoMirrored.Filled.VolumeUp,
+                    title   = "Gentle Volume Ramp-Up",
+                    subtitle = "Starts at 15% volume and smoothly escalates over 15 seconds",
+                    checked = gentleVolumeRamp,
+                    onCheckedChange = {
+                        gentleVolumeRamp = it
+                        AlarmPreferences.setGentleVolumeRamp(context, it)
+                    },
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color    = MaterialTheme.colorScheme.outline,
+                )
+
+                // Vibration Toggle
                 SettingsRowToggle(
                     icon    = Icons.Filled.Vibration,
-                    title   = "Vibration",
+                    title   = "Alarm Vibration",
+                    subtitle = "Rhythmic haptic pulsation during incoming wake-up calls",
                     checked = vibrationEnabled,
-                    onCheckedChange = { vibrationEnabled = it },
+                    onCheckedChange = {
+                        vibrationEnabled = it
+                        AlarmPreferences.setVibrationEnabled(context, it)
+                    },
                 )
+
+                if (vibrationEnabled) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "Vibration Pattern (tap to preview)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf(
+                            AlarmPreferences.PATTERN_CADENCE to "Cadence",
+                            AlarmPreferences.PATTERN_HEARTBEAT to "Heartbeat",
+                            AlarmPreferences.PATTERN_GENTLE to "Gentle",
+                        ).forEach { (id, label) ->
+                            val isSelected = vibrationPattern.equals(id, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) SubtleGold else MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable {
+                                        vibrationPattern = id
+                                        AlarmPreferences.setVibrationPattern(context, id)
+                                        AlarmVibrator.preview(context, id)
+                                    }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (isSelected) MidnightBlue else MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    }
+                }
+
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 12.dp),
                     color    = MaterialTheme.colorScheme.outline,
                 )
+
                 SettingsRowPlaceholder(
                     icon  = Icons.Filled.AlarmOff,
-                    title = "Alarm Duration",
-                    value = "15 minutes maximum validity",
+                    title = "Alarm Auto-Dismiss",
+                    value = "15 minutes maximum validity before auto-expiry",
                 )
             }
 
@@ -146,21 +216,30 @@ fun SettingsScreen(
             SettingsSectionHeader(title = "Notifications & Lockscreen")
             QalbiCard(modifier = Modifier.fillMaxWidth()) {
                 SettingsRowPlaceholder(
-                    icon  = Icons.Filled.MusicNote,
+                    icon  = Icons.Filled.NotificationsActive,
                     title = "Full-Screen Wake Alert",
-                    value = "Shows over lockscreen when alarm is triggered",
+                    value = "Rings over keyguard lockscreen using foreground media playback",
                 )
             }
 
             Spacer(Modifier.height(20.dp))
 
             // ── Privacy & About section ───────────────────────────────────────
-            SettingsSectionHeader(title = "Privacy & About")
+            SettingsSectionHeader(title = "Privacy & Architecture")
             QalbiCard(modifier = Modifier.fillMaxWidth()) {
                 SettingsRowPlaceholder(
                     icon  = Icons.Filled.Lock,
-                    title = "Privacy",
-                    value = "No personal data leaves this device in Phase 1",
+                    title = "Private Friend Pairing",
+                    value = "No mobile numbers required. Single-use 8-character Crockford Base32 codes.",
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color    = MaterialTheme.colorScheme.outline,
+                )
+                SettingsRowPlaceholder(
+                    icon  = Icons.Filled.CloudDone,
+                    title = "Zero-Cost Cloud Architecture",
+                    value = "Operates strictly under the free Firebase Spark tier. ₹0 budget.",
                 )
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 12.dp),
@@ -169,7 +248,7 @@ fun SettingsScreen(
                 SettingsRowPlaceholder(
                     icon  = Icons.Filled.Info,
                     title = stringResource(R.string.about_qalbi),
-                    value = stringResource(R.string.version),
+                    value = "v1.0.0 (Release Candidate)",
                 )
             }
 
@@ -230,6 +309,7 @@ private fun SettingsRowPlaceholder(
 private fun SettingsRowToggle(
     icon: ImageVector,
     title: String,
+    subtitle: String? = null,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
@@ -244,12 +324,20 @@ private fun SettingsRowToggle(
             modifier           = Modifier.size(20.dp),
         )
         Spacer(Modifier.size(14.dp))
-        Text(
-            text     = title,
-            style    = MaterialTheme.typography.titleSmall,
-            color    = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text     = title,
+                style    = MaterialTheme.typography.titleSmall,
+                color    = MaterialTheme.colorScheme.onSurface,
+            )
+            subtitle?.let {
+                Text(
+                    text  = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Switch(
             checked         = checked,
             onCheckedChange = onCheckedChange,

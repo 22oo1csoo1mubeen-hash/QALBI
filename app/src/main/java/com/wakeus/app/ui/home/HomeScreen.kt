@@ -58,6 +58,7 @@ fun HomeScreen(
     val firstName = user.displayName.trim().split(" ").firstOrNull()?.ifEmpty { "there" } ?: "there"
     val friends by QalbiRepository.friends.collectAsState(initial = emptyList())
     val incomingRequests by QalbiRepository.incomingWakeUpRequests.collectAsState(initial = emptyList())
+    val isOnline by com.wakeus.app.data.network.NetworkMonitor.isOnline.collectAsState()
 
     Scaffold(
         containerColor = MidnightBlue,
@@ -104,6 +105,33 @@ fun HomeScreen(
                 .verticalScroll(rememberScrollState()),
         ) {
             Spacer(Modifier.height(8.dp))
+
+            // Offline network banner
+            if (!isOnline) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector        = Icons.Filled.WifiOff,
+                            contentDescription = "Offline",
+                            tint               = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier           = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text  = "No internet connection. Requests and status will sync once reconnected.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
 
             // Personalized greeting
             Text(
@@ -277,18 +305,22 @@ private fun HomeFriendItem(
             modifier          = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val avatarColor = androidx.compose.ui.graphics.Color(
+                com.wakeus.app.data.model.AvatarPreset.getColor(friend.avatarStyle)
+            )
+
             // Avatar with initials
             Box(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(MutedRose),
+                    .background(avatarColor),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text  = friend.initials,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSecondary,
+                    color = MidnightBlue,
                 )
             }
 

@@ -152,6 +152,20 @@ object QalbiRepository {
         return authRepository.logout()
     }
 
+    /**
+     * Updates the avatar style preference and synchronizes across user profiles.
+     */
+    suspend fun updateAvatarStyle(avatarStyle: String): Result<Unit> {
+        val currentUser = (authState.value as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: demoUser
+        val updatedUser = currentUser.copy(avatarStyle = avatarStyle)
+        authRepository.updateCurrentUser(updatedUser)
+        return if (userRepository.isConfigured() && currentUser.id != demoUser.id) {
+            userRepository.updateAvatarStyle(currentUser.id, avatarStyle)
+        } else {
+            Result.success(Unit)
+        }
+    }
+
     // ─── Legacy mock functions for Phase 1 compatibility ─────────────────────
     suspend fun mockRegister(
         displayName: String,
