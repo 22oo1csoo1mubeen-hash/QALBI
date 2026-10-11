@@ -58,6 +58,10 @@ ehthumbs.db
 # Google Services / Firebase credentials (protect API keys from public git)
 google-services.json
 **/google-services.json
+serviceAccountKey.json
+**/serviceAccountKey.json
+*.env
+**/node_modules/
 
 # Kotlin daemon & caches
 .kotlin/

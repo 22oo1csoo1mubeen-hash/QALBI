@@ -6,19 +6,21 @@ QALBI (Arabic: قلبي, "my heart") is a native Android application that lets c
 
 ---
 
-## Current Status: Phase 3 Complete (Friend Pairing System)
+## Current Status: Phase 4 Complete (Remote Wake-Up Communication)
 
 - **Phase 1**: Complete 10-screen foundation with Jetpack Compose & Material 3.
 - **Phase 2**: Production-oriented Firebase Authentication & Cloud Firestore integration (Email & Username accounts, atomic claims).
-- **Phase 3**: Atomic Friend Pairing System under strict ₹0 Spark plan.
-  - Cryptographically secure 8-character single-use pairing codes (Crockford Base32, 10-minute expiry).
-  - Concurrency-safe atomic redemption via Firestore transactions (`/pairingCodes/{code}`).
-  - Deterministic bidirectional connection documents (`/connections/{connectionId}`).
-  - Minimal public profile projections (`/publicProfiles/{uid}`) protecting email addresses.
-  - Real-time connected friends listener on Home and Connected Friends screens.
-  - Full Disconnect and Block functionality with mutual disconnection and blocklist enforcement.
-  - Comprehensive unit test suite (`FriendPairingTest`).
-  - Restrictive Firestore security rules (`firestore.rules`).
+- **Phase 3**: Atomic Friend Pairing System under strict ₹0 Spark plan (Crockford Base32 codes, deterministic connections, blocklists).
+- **Phase 4**: Remote Wake-Up Communication under strict ₹0 Spark plan:
+  - Atomic Firestore request lifecycle (`/wakeUpRequests/{requestId}`) with statuses `PENDING`, `ACKNOWLEDGED`, `DECLINED`, `CANCELLED`, `EXPIRED`.
+  - Recipient interaction screen (`IncomingRequestScreen`) with "I'm Awake!" and "Decline" actions.
+  - Sender real-time status tracking (`WakeUpScreen`) with live state feedback and cancellation.
+  - Home Screen active incoming wake-up alert banner.
+  - FCM receiving service (`QalbiMessagingService`) and high-priority notification channel (`qalbi_wake_up_channel`).
+  - Android 13+ `POST_NOTIFICATIONS` runtime permission launcher and deep-link handling.
+  - Trusted zero-cost FCM push dispatcher (`backend/fcm-dispatcher/dispatcher.js`) using Firebase Admin SDK.
+  - Unit test suite (`WakeUpCommunicationTest`) verifying state transitions, duplicate prevention, and authorization.
+  - Updated Firestore security rules for request immutability and token privacy.
 
 ---
 
@@ -89,9 +91,9 @@ The output APK is generated at:
 |---|---|---|
 | Jetpack Compose UI & Navigation | Phase 1 | ✅ Complete |
 | Firebase Authentication & Profiles | Phase 2 | ✅ Complete |
-| Firestore Friend Pairing | Phase 3 | Upcoming |
-| FCM Remote Wake-Up & Alarm Engine | Phase 4 | Upcoming |
-| Profile Photos & Polish | Phase 5 | Upcoming |
+| Firestore Friend Pairing | Phase 3 | ✅ Complete |
+| FCM Remote Wake-Up Communication | Phase 4 | ✅ Complete |
+| Looping Alarm Engine & Polish | Phase 5 | Upcoming |
 
 ---
 

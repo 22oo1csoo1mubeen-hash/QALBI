@@ -1,6 +1,7 @@
 package com.wakeus.app.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -14,16 +15,26 @@ import com.wakeus.app.ui.home.HomeScreen
 import com.wakeus.app.ui.profile.ProfileScreen
 import com.wakeus.app.ui.settings.SettingsScreen
 import com.wakeus.app.ui.splash.SplashScreen
+import com.wakeus.app.ui.wakeup.IncomingRequestScreen
 import com.wakeus.app.ui.wakeup.WakeUpScreen
 import com.wakeus.app.ui.welcome.WelcomeScreen
 
 /**
  * Central navigation graph for the QALBI app.
  * All screen composables are wired here. The graph starts at Splash and
- * manages the complete Phase 1 flow.
+ * manages the complete navigation flow.
  */
 @Composable
-fun AppNavigation(navController: NavHostController) {
+fun AppNavigation(
+    navController: NavHostController,
+    initialRequestId: String? = null,
+) {
+    LaunchedEffect(initialRequestId) {
+        if (!initialRequestId.isNullOrBlank()) {
+            navController.navigate(Screen.IncomingRequest.withId(initialRequestId))
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = Screen.Splash.route,
@@ -91,6 +102,7 @@ fun AppNavigation(navController: NavHostController) {
                 onFriendSelected   = { id -> navController.navigate(Screen.FriendDetail.withId(id)) },
                 onConnectedFriends = { navController.navigate(Screen.ConnectedFriends.route) },
                 onProfile          = { navController.navigate(Screen.Profile.route) },
+                onIncomingRequest  = { id -> navController.navigate(Screen.IncomingRequest.withId(id)) },
             )
         }
 
@@ -127,6 +139,17 @@ fun AppNavigation(navController: NavHostController) {
             WakeUpScreen(
                 friendId = friendId,
                 onBack   = { navController.popBackStack() },
+            )
+        }
+
+        composable(
+            route = Screen.IncomingRequest.route,
+            arguments = listOf(navArgument("requestId") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val requestId = backStackEntry.arguments?.getString("requestId") ?: ""
+            IncomingRequestScreen(
+                requestId = requestId,
+                onBack    = { navController.popBackStack() },
             )
         }
 

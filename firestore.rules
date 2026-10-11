@@ -35,6 +35,12 @@ service cloud.firestore {
 
       // Delete: owner only
       allow delete: if isOwner(userId);
+
+      // FCM Device Tokens: /users/{userId}/fcmTokens/{tokenId}
+      match /fcmTokens/{tokenId} {
+        // Only the authenticated device owner can register or remove their tokens
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // ─── Username Registry: /usernames/{usernameNormalized} ──────────────────
@@ -124,6 +130,67 @@ service cloud.firestore {
     match /userBlocks/{blockerUid}/blockedUsers/{blockedUid} {
       // Only the blocking user can read or write their own block list
       allow read, write: if isAuthenticated() && request.auth.uid == blockerUid;
+    }
+
+    // ─── Wake-Up Requests: /wakeUpRequests/{requestId} ──────────────────────
+    match /wakeUpRequests/{requestId} {
+      // Only the sender or receiver can view a request
+      allow read: if isAuthenticated() && (
+        resource.data.senderUid == request.auth.uid ||
+        resource.data.receiverUid == request.auth.uid
+      );
+
+      // Create: Authenticated sender, valid recipient, status PENDING
+      allow create: if isAuthenticated()
+                    && request.resource.data.senderUid == request.auth.uid
+                    && request.resource.data.receiverUid != request.auth.uid
+                    && request.resource.data.status == "PENDING"
+                    && request.resource.data.requestId == requestId
+                    && request.resource.data.createdAt != null
+                    && request.resource.data.expiresAt != null;
+
+      // Update: Atomic lifecycle transitions
+      allow update: if isAuthenticated()
+                    // Immutable fields check
+                    && request.resource.data.requestId == resource.data.requestId
+                    && request.resource.data.senderUid == resource.data.senderUid
+                    && request.resource.data.receiverUid == resource.data.receiverUid
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && (
+                      // 1. Receiver acknowledges
+                      (
+                        resource.data.status == "PENDING"
+                        && request.auth.uid == resource.data.receiverUid
+                        && request.resource.data.status == "ACKNOWLEDGED"
+                        && request.resource.data.acknowledgedAt != null
+                      )
+                      ||
+                      // 2. Receiver declines
+                      (
+                        resource.data.status == "PENDING"
+                        && request.auth.uid == resource.data.receiverUid
+                        && request.resource.data.status == "DECLINED"
+                        && request.resource.data.declinedAt != null
+                      )
+                      ||
+                      // 3. Sender cancels
+                      (
+                        resource.data.status == "PENDING"
+                        && request.auth.uid == resource.data.senderUid
+                        && request.resource.data.status == "CANCELLED"
+                        && request.resource.data.cancelledAt != null
+                      )
+                      ||
+                      // 4. Mark expired
+                      (
+                        resource.data.status == "PENDING"
+                        && (request.auth.uid == resource.data.senderUid || request.auth.uid == resource.data.receiverUid)
+                        && request.resource.data.status == "EXPIRED"
+                      )
+                    );
+
+      // Requests are persistent records; cannot be deleted arbitrarily by clients
+      allow delete: if false;
     }
 
     // ─── Default Deny ────────────────────────────────────────────────────────

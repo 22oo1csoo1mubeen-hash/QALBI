@@ -273,11 +273,15 @@ data class Connection(
     }
 }
 
-/** Represents the result of a wake-up request. */
+/** Represents the result of a wake-up request in UI state. */
 enum class WakeUpState {
     IDLE,
     PENDING,
     SENT_DEMO,
+    ACKNOWLEDGED,
+    DECLINED,
+    CANCELLED,
+    EXPIRED,
     UNAVAILABLE,
 }
 
@@ -286,3 +290,139 @@ data class ConnectionCode(
     val code: String,
     val expiryLabel: String = "Expires in 10 minutes",
 )
+
+/** Lifecycle status of a remote wake-up communication request. */
+enum class WakeUpRequestStatus {
+    PENDING,
+    ACKNOWLEDGED,
+    DECLINED,
+    CANCELLED,
+    EXPIRED,
+}
+
+/**
+ * Represents a persistent remote wake-up communication request in Firestore.
+ */
+data class WakeUpRequest(
+    val requestId: String,
+    val senderUid: String,
+    val senderDisplayName: String,
+    val senderUsername: String,
+    val receiverUid: String,
+    val receiverDisplayName: String,
+    val receiverUsername: String,
+    val connectionId: String,
+    val status: WakeUpRequestStatus = WakeUpRequestStatus.PENDING,
+    val createdAt: Long = System.currentTimeMillis(),
+    val expiresAt: Long = System.currentTimeMillis() + 15 * 60 * 1000L, // 15 minutes default
+    val updatedAt: Long = System.currentTimeMillis(),
+    val acknowledgedAt: Long? = null,
+    val declinedAt: Long? = null,
+    val cancelledAt: Long? = null,
+    val expiredAt: Long? = null,
+    val schemaVersion: Int = 1,
+) {
+    val isPending: Boolean get() = status == WakeUpRequestStatus.PENDING && !isExpired
+    val isExpired: Boolean get() = System.currentTimeMillis() >= expiresAt || status == WakeUpRequestStatus.EXPIRED
+
+    fun canBeCancelledBy(uid: String): Boolean =
+        uid == senderUid && status == WakeUpRequestStatus.PENDING && !isExpired
+
+    fun canBeRespondedBy(uid: String): Boolean =
+        uid == receiverUid && status == WakeUpRequestStatus.PENDING && !isExpired
+
+    fun toMap(): Map<String, Any?> = mapOf(
+        "requestId" to requestId,
+        "senderUid" to senderUid,
+        "senderDisplayName" to senderDisplayName,
+        "senderUsername" to senderUsername,
+        "receiverUid" to receiverUid,
+        "receiverDisplayName" to receiverDisplayName,
+        "receiverUsername" to receiverUsername,
+        "connectionId" to connectionId,
+        "status" to status.name,
+        "createdAt" to com.google.firebase.Timestamp(java.util.Date(createdAt)),
+        "expiresAt" to com.google.firebase.Timestamp(java.util.Date(expiresAt)),
+        "updatedAt" to com.google.firebase.Timestamp(java.util.Date(updatedAt)),
+        "acknowledgedAt" to (acknowledgedAt?.let { com.google.firebase.Timestamp(java.util.Date(it)) }),
+        "declinedAt" to (declinedAt?.let { com.google.firebase.Timestamp(java.util.Date(it)) }),
+        "cancelledAt" to (cancelledAt?.let { com.google.firebase.Timestamp(java.util.Date(it)) }),
+        "expiredAt" to (expiredAt?.let { com.google.firebase.Timestamp(java.util.Date(it)) }),
+        "schemaVersion" to schemaVersion,
+    )
+
+    companion object {
+        fun fromMap(id: String, data: Map<String, Any?>): WakeUpRequest {
+            val senderUid = data["senderUid"] as? String ?: ""
+            val senderDisplayName = data["senderDisplayName"] as? String ?: ""
+            val senderUsername = data["senderUsername"] as? String ?: ""
+            val receiverUid = data["receiverUid"] as? String ?: ""
+            val receiverDisplayName = data["receiverDisplayName"] as? String ?: ""
+            val receiverUsername = data["receiverUsername"] as? String ?: ""
+            val connectionId = data["connectionId"] as? String ?: ""
+            val statusStr = data["status"] as? String ?: WakeUpRequestStatus.PENDING.name
+            val status = try {
+                WakeUpRequestStatus.valueOf(statusStr)
+            } catch (_: Exception) {
+                WakeUpRequestStatus.PENDING
+            }
+            val createdAt = when (val c = data["createdAt"]) {
+                is com.google.firebase.Timestamp -> c.toDate().time
+                is Number -> c.toLong()
+                else -> System.currentTimeMillis()
+            }
+            val expiresAt = when (val e = data["expiresAt"]) {
+                is com.google.firebase.Timestamp -> e.toDate().time
+                is Number -> e.toLong()
+                else -> createdAt + 15 * 60 * 1000L
+            }
+            val updatedAt = when (val u = data["updatedAt"]) {
+                is com.google.firebase.Timestamp -> u.toDate().time
+                is Number -> u.toLong()
+                else -> createdAt
+            }
+            val acknowledgedAt = (data["acknowledgedAt"] as? com.google.firebase.Timestamp)?.toDate()?.time
+            val declinedAt = (data["declinedAt"] as? com.google.firebase.Timestamp)?.toDate()?.time
+            val cancelledAt = (data["cancelledAt"] as? com.google.firebase.Timestamp)?.toDate()?.time
+            val expiredAt = (data["expiredAt"] as? com.google.firebase.Timestamp)?.toDate()?.time
+            val schemaVersion = (data["schemaVersion"] as? Number)?.toInt() ?: 1
+
+            val effectiveStatus = if (status == WakeUpRequestStatus.PENDING && System.currentTimeMillis() >= expiresAt) {
+                WakeUpRequestStatus.EXPIRED
+            } else status
+
+            return WakeUpRequest(
+                requestId = id,
+                senderUid = senderUid,
+                senderDisplayName = senderDisplayName,
+                senderUsername = senderUsername,
+                receiverUid = receiverUid,
+                receiverDisplayName = receiverDisplayName,
+                receiverUsername = receiverUsername,
+                connectionId = connectionId,
+                status = effectiveStatus,
+                createdAt = createdAt,
+                expiresAt = expiresAt,
+                updatedAt = updatedAt,
+                acknowledgedAt = acknowledgedAt,
+                declinedAt = declinedAt,
+                cancelledAt = cancelledAt,
+                expiredAt = expiredAt,
+                schemaVersion = schemaVersion,
+            )
+        }
+    }
+}
+
+/** Device FCM token registration model. */
+data class FcmDeviceToken(
+    val token: String,
+    val deviceModel: String = try { android.os.Build.MODEL ?: "Android Device" } catch (_: Throwable) { "Android Device" },
+    val updatedAt: Long = System.currentTimeMillis(),
+) {
+    fun toMap(): Map<String, Any?> = mapOf(
+        "token" to token,
+        "deviceModel" to deviceModel,
+        "updatedAt" to com.google.firebase.Timestamp(java.util.Date(updatedAt)),
+    )
+}

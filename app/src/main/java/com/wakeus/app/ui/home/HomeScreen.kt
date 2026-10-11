@@ -50,11 +50,13 @@ fun HomeScreen(
     onFriendSelected: (String) -> Unit,
     onConnectedFriends: () -> Unit,
     onProfile: () -> Unit,
+    onIncomingRequest: (String) -> Unit = {},
 ) {
     val authState by QalbiRepository.authState.collectAsState()
     val user = (authState as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: QalbiRepository.demoUser
     val firstName = user.displayName.trim().split(" ").firstOrNull()?.ifEmpty { "there" } ?: "there"
     val friends by QalbiRepository.friends.collectAsState(initial = emptyList())
+    val incomingRequests by QalbiRepository.incomingWakeUpRequests.collectAsState(initial = emptyList())
 
     Scaffold(
         containerColor = MidnightBlue,
@@ -114,6 +116,41 @@ fun HomeScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            // ── Incoming Wake-Up Alert (if any active requests) ─────────────
+            incomingRequests.firstOrNull()?.let { req ->
+                Spacer(Modifier.height(16.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(SubtleGold.copy(alpha = 0.18f))
+                        .clickable { onIncomingRequest(req.requestId) }
+                        .padding(16.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector        = Icons.Filled.Favorite,
+                            contentDescription = null,
+                            tint               = SubtleGold,
+                            modifier           = Modifier.size(32.dp),
+                        )
+                        Spacer(Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text  = "${req.senderDisplayName} is waking you up! \u2600\uFE0F",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                            Text(
+                                text  = "Tap here to answer: I'm Awake!",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SubtleGold,
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(Modifier.height(24.dp))
 

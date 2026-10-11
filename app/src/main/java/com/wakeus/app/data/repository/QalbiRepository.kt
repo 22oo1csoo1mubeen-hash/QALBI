@@ -49,10 +49,12 @@ object QalbiRepository {
         return if (id == demoFriend.id) demoFriend else null
     }
 
-    // ─── Phase 2 & 3 Repositories ──────────────────────────────────────────
+    // ─── Phase 2, 3 & 4 Repositories ────────────────────────────────────────
     val authRepository = AuthRepository()
     val userRepository = UserRepository()
     val friendRepository = com.wakeus.app.data.friends.FriendRepository()
+    val wakeUpRepository = com.wakeus.app.data.wakeup.WakeUpRepository()
+    val fcmTokenRepository = com.wakeus.app.data.fcm.FcmTokenRepository()
 
     val authState: StateFlow<com.wakeus.app.data.auth.AuthState> = authRepository.authState
 
@@ -261,14 +263,97 @@ object QalbiRepository {
         return redeemPairingCode(code).map { "Successfully connected with @${it.username}!" }
     }
 
-    // ─── Mock wake-up ─────────────────────────────────────────────────────────
+    // ─── Phase 4 Wake-Up Communication ───────────────────────────────────────
     /**
-     * Simulates sending a wake-up request.
-     * No real notification or alarm is sent.
-     * Returns [WakeUpState.SENT_DEMO] after a short delay.
+     * Sends an authentic remote wake-up request to a connected friend in Firestore.
      */
+    suspend fun sendWakeUp(receiver: Friend): Result<com.wakeus.app.data.model.WakeUpRequest> {
+        val user = (authState.value as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: demoUser
+        return if (wakeUpRepository.isConfigured() && !receiver.isDemo) {
+            wakeUpRepository.sendWakeUpRequest(user, receiver)
+        } else {
+            delay(1200)
+            val now = System.currentTimeMillis()
+            Result.success(
+                com.wakeus.app.data.model.WakeUpRequest(
+                    requestId = "mock-req-" + now.toString().takeLast(6),
+                    senderUid = user.id,
+                    senderDisplayName = user.displayName,
+                    senderUsername = user.username,
+                    receiverUid = receiver.id,
+                    receiverDisplayName = receiver.displayName,
+                    receiverUsername = receiver.username,
+                    connectionId = "demo_connection",
+                    status = com.wakeus.app.data.model.WakeUpRequestStatus.PENDING,
+                    createdAt = now,
+                )
+            )
+        }
+    }
+
+    /**
+     * Observes real-time updates for an outgoing wake-up request.
+     */
+    fun observeRequest(requestId: String): Flow<com.wakeus.app.data.model.WakeUpRequest?> {
+        return if (wakeUpRepository.isConfigured()) {
+            wakeUpRepository.observeRequest(requestId)
+        } else {
+            kotlinx.coroutines.flow.flowOf(null)
+        }
+    }
+
+    /**
+     * Observes active incoming wake-up requests for the authenticated user.
+     */
+    val incomingWakeUpRequests: Flow<List<com.wakeus.app.data.model.WakeUpRequest>> = kotlinx.coroutines.flow.flow {
+        authState.collect { state ->
+            if (state is com.wakeus.app.data.auth.AuthState.Authenticated && wakeUpRepository.isConfigured()) {
+                wakeUpRepository.observeIncomingRequests(state.user.id).collect { emit(it) }
+            } else {
+                emit(emptyList())
+            }
+        }
+    }
+
+    /**
+     * Receiver acknowledges the wake-up request ("I'm Awake!").
+     */
+    suspend fun acknowledgeWakeUp(requestId: String): Result<Unit> {
+        val user = (authState.value as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: demoUser
+        return if (wakeUpRepository.isConfigured()) {
+            wakeUpRepository.acknowledgeRequest(requestId, user.id)
+        } else {
+            Result.success(Unit)
+        }
+    }
+
+    /**
+     * Receiver declines the wake-up request.
+     */
+    suspend fun declineWakeUp(requestId: String): Result<Unit> {
+        val user = (authState.value as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: demoUser
+        return if (wakeUpRepository.isConfigured()) {
+            wakeUpRepository.declineRequest(requestId, user.id)
+        } else {
+            Result.success(Unit)
+        }
+    }
+
+    /**
+     * Sender cancels a pending wake-up request.
+     */
+    suspend fun cancelWakeUp(requestId: String): Result<Unit> {
+        val user = (authState.value as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: demoUser
+        return if (wakeUpRepository.isConfigured()) {
+            wakeUpRepository.cancelRequest(requestId, user.id)
+        } else {
+            Result.success(Unit)
+        }
+    }
+
+    // ─── Mock wake-up compatibility helper ───────────────────────────────────
     suspend fun sendWakeUpRequest(@Suppress("UNUSED_PARAMETER") friendId: String): WakeUpState {
-        delay(1500)
+        delay(1200)
         return WakeUpState.SENT_DEMO
     }
 }

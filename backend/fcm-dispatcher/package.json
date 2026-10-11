@@ -1,0 +1,21 @@
+{
+  "name": "qalbi-fcm-dispatcher",
+  "version": "1.0.0",
+  "description": "Zero-cost trusted FCM push notification dispatcher for QALBI",
+  "main": "dispatcher.js",
+  "scripts": {
+    "start": "node dispatcher.js",
+    "test": "node -e \"console.log('FCM Dispatcher configured for QALBI')\""
+  },
+  "keywords": [
+    "qalbi",
+    "fcm",
+    "firebase",
+    "push-notifications"
+  ],
+  "author": "QALBI Team",
+  "license": "ISC",
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}

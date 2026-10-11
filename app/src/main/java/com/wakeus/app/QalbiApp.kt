@@ -10,6 +10,7 @@ import android.app.Application
 class QalbiApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        // Phase 1: no third-party SDKs to initialize.
+        // Phase 4: Create high-priority notification channels for wake-up requests
+        com.wakeus.app.data.fcm.NotificationHelper.createNotificationChannel(this)
     }
 }
