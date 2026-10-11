@@ -1,6 +1,5 @@
 package com.wakeus.app.ui.auth
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,7 +29,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.wakeus.app.R
-import com.wakeus.app.ui.components.DemoBadge
 import com.wakeus.app.ui.components.QalbiButton
 import com.wakeus.app.ui.components.QalbiTextField
 import com.wakeus.app.ui.components.QalbiTextButton
@@ -75,22 +73,19 @@ fun LoginScreen(
         ) {
             Spacer(Modifier.height(16.dp))
 
-            DemoBadge()
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text      = "Demo login — any non-empty values will sign you in. No credentials are stored.",
-                style     = MaterialTheme.typography.bodySmall,
-                color     = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-            Spacer(Modifier.height(32.dp))
-
             Text(
                 text  = "Welcome back",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text      = "Sign in using your registered email address or username.",
+                style     = MaterialTheme.typography.bodySmall,
+                color     = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(28.dp))
 
             QalbiTextField(
                 value         = uiState.emailOrUsername,
@@ -98,6 +93,7 @@ fun LoginScreen(
                 label         = "Email or Username",
                 error         = uiState.emailError,
                 modifier      = Modifier.fillMaxWidth(),
+                enabled       = !uiState.isLoading,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Email,
                     imeAction    = ImeAction.Next,

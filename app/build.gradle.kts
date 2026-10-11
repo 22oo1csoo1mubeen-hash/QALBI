@@ -76,6 +76,12 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.play.services)
+
+    // Firebase — versioned by BOM
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
 
     // Testing
     testImplementation(libs.junit)
@@ -87,4 +93,9 @@ dependencies {
     // Debug
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+// Apply Google Services plugin when google-services.json is provided by the user
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }

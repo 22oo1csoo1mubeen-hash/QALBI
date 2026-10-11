@@ -26,6 +26,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,7 +48,9 @@ fun HomeScreen(
     onConnectedFriends: () -> Unit,
     onProfile: () -> Unit,
 ) {
-    val user = QalbiRepository.demoUser
+    val authState by QalbiRepository.authState.collectAsState()
+    val user = (authState as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: QalbiRepository.demoUser
+    val firstName = user.displayName.trim().split(" ").firstOrNull()?.ifEmpty { "there" } ?: "there"
 
     Scaffold(
         containerColor = MidnightBlue,
@@ -100,7 +104,7 @@ fun HomeScreen(
 
             // Personalized greeting
             Text(
-                text  = "Good morning, ${user.displayName.split(" ").first()} \uD83C\uDF05",
+                text  = "Good morning, $firstName \uD83C\uDF05",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )

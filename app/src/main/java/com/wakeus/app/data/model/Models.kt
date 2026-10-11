@@ -1,16 +1,79 @@
 package com.wakeus.app.data.model
 
 /**
- * Represents a user within the QALBI app.
- * In Phase 1 this is populated only with demo/mock values.
- * In later phases this will be backed by Firebase Auth and Firestore.
+ * Registration method / account type supported by QALBI.
+ */
+enum class AccountType {
+    EMAIL,
+    USERNAME,
+}
+
+/**
+ * Represents an authenticated user within the QALBI app.
+ * In Phase 2, this is backed by Firebase Authentication and Cloud Firestore.
  */
 data class User(
     val id: String,
     val displayName: String,
     val username: String,
-    val email: String,
-)
+    val usernameNormalized: String = username.lowercase().trim(),
+    val email: String? = null,
+    val accountType: AccountType = if (email.isNullOrBlank()) AccountType.USERNAME else AccountType.EMAIL,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val profileVersion: Int = 1,
+) {
+    /** Backward compatibility helper for displays expecting non-null string. */
+    val emailDisplay: String get() = email ?: "Username-only account"
+
+    companion object {
+        fun fromMap(id: String, data: Map<String, Any?>): User {
+            val displayName = data["displayName"] as? String ?: ""
+            val username = data["username"] as? String ?: ""
+            val usernameNormalized = data["usernameNormalized"] as? String ?: username.lowercase().trim()
+            val email = data["email"] as? String
+            val accountTypeStr = data["accountType"] as? String
+            val accountType = if (accountTypeStr == "USERNAME") AccountType.USERNAME else AccountType.EMAIL
+            val createdAt = when (val c = data["createdAt"]) {
+                is com.google.firebase.Timestamp -> c.toDate().time
+                is Number -> c.toLong()
+                else -> System.currentTimeMillis()
+            }
+            val updatedAt = when (val u = data["updatedAt"]) {
+                is com.google.firebase.Timestamp -> u.toDate().time
+                is Number -> u.toLong()
+                else -> System.currentTimeMillis()
+            }
+            val profileVersion = (data["profileVersion"] as? Number)?.toInt() ?: 1
+
+            return User(
+                id = id,
+                displayName = displayName,
+                username = username,
+                usernameNormalized = usernameNormalized,
+                email = email,
+                accountType = accountType,
+                createdAt = createdAt,
+                updatedAt = updatedAt,
+                profileVersion = profileVersion,
+            )
+        }
+    }
+
+    fun toMap(): Map<String, Any?> {
+        return mapOf(
+            "uid" to id,
+            "displayName" to displayName,
+            "username" to username,
+            "usernameNormalized" to usernameNormalized,
+            "email" to email,
+            "accountType" to accountType.name,
+            "createdAt" to com.google.firebase.Timestamp(java.util.Date(createdAt)),
+            "updatedAt" to com.google.firebase.Timestamp(java.util.Date(updatedAt)),
+            "profileVersion" to profileVersion,
+        )
+    }
+}
 
 /**
  * Represents a connected friend.

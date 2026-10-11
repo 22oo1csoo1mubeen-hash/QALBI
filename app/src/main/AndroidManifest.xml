@@ -2,12 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-        Phase 1 permissions:
-        - INTERNET is intentionally omitted (no backend in Phase 1)
-        - Alarm, notification, microphone, contacts, location permissions
-          are deferred to later phases.
-        - Only VIBRATE is declared because it may be simulated in Settings UI.
+        Phase 2 permissions:
+        - INTERNET & ACCESS_NETWORK_STATE for Firebase Authentication & Cloud Firestore
+        - VIBRATE for UI haptic feedback
     -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <application

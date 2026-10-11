@@ -13,6 +13,8 @@ splashscreen = "1.0.1"
 junit = "4.13.2"
 junit-android = "1.1.5"
 espresso = "3.5.1"
+firebase-bom = "32.8.1"
+google-services = "4.4.1"
 
 [libraries]
 # AndroidX Core
@@ -37,6 +39,12 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 
 # Coroutines
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
+
+# Firebase (managed by BOM)
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth-ktx" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore-ktx" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -46,3 +54,4 @@ androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-co
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }

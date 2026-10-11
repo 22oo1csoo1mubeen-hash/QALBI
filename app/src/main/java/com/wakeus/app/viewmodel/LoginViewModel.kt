@@ -21,7 +21,9 @@ data class LoginUiState(
     val passwordError: String? = null,
 )
 
-class LoginViewModel : ViewModel() {
+class LoginViewModel(
+    private val repository: QalbiRepository = QalbiRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
@@ -42,7 +44,15 @@ class LoginViewModel : ViewModel() {
 
     fun submit() {
         val state = _uiState.value
-        val emailError = if (state.emailOrUsername.isBlank()) "Email or username is required" else null
+        // Prevent duplicate submissions
+        if (state.isLoading) return
+
+        val trimmedIdentifier = state.emailOrUsername.trim()
+        val emailError = when {
+            trimmedIdentifier.isBlank() -> "Email or username is required"
+            trimmedIdentifier.length < 3 -> "Enter a valid email or username (at least 3 characters)"
+            else -> null
+        }
         val passwordError = if (state.password.isBlank()) "Password is required" else null
 
         if (emailError != null || passwordError != null) {
@@ -52,13 +62,18 @@ class LoginViewModel : ViewModel() {
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            val result = QalbiRepository.mockLogin(state.emailOrUsername, state.password)
+            val result = repository.login(trimmedIdentifier, state.password)
             result.fold(
                 onSuccess = { user ->
                     _uiState.update { it.copy(isLoading = false, successUser = user) }
                 },
                 onFailure = { e ->
-                    _uiState.update { it.copy(isLoading = false, error = e.message) }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = e.localizedMessage ?: "Login failed. Please verify your credentials."
+                        )
+                    }
                 },
             )
         }

@@ -32,8 +32,15 @@ fun AppNavigation(navController: NavHostController) {
         composable(Screen.Splash.route) {
             SplashScreen(
                 onSplashComplete = {
-                    navController.navigate(Screen.Welcome.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    val currentAuthState = com.wakeus.app.data.repository.QalbiRepository.authState.value
+                    if (currentAuthState is com.wakeus.app.data.auth.AuthState.Authenticated) {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Splash.route) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(Screen.Welcome.route) {
+                            popUpTo(Screen.Splash.route) { inclusive = true }
+                        }
                     }
                 }
             )
@@ -127,6 +134,7 @@ fun AppNavigation(navController: NavHostController) {
             SettingsScreen(
                 onBack   = { navController.popBackStack() },
                 onLogout = {
+                    com.wakeus.app.data.repository.QalbiRepository.logout()
                     navController.navigate(Screen.Welcome.route) {
                         popUpTo(0) { inclusive = true }
                     }

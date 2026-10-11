@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ─── User Profile Documents: /users/{userId} ─────────────────────────────
+    match /users/{userId} {
+      // Authenticated users can read profile data
+      allow read: if isAuthenticated();
+
+      // Create: user must be authenticated, creating their own UID, with no passwords/tokens
+      allow create: if isOwner(userId)
+                    && request.resource.data.uid == userId
+                    && request.resource.data.username is string
+                    && request.resource.data.username.size() >= 3
+                    && request.resource.data.username.size() <= 20
+                    && !('password' in request.resource.data)
+                    && !('passwordHash' in request.resource.data)
+                    && !('token' in request.resource.data);
+
+      // Update: owner only; UID and createdAt cannot be modified; credentials forbidden
+      allow update: if isOwner(userId)
+                    && request.resource.data.uid == userId
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && !('password' in request.resource.data)
+                    && !('passwordHash' in request.resource.data);
+
+      // Delete: owner only
+      allow delete: if isOwner(userId);
+    }
+
+    // ─── Username Registry: /usernames/{usernameNormalized} ──────────────────
+    match /usernames/{username} {
+      // Authenticated users can check availability
+      allow read: if isAuthenticated();
+
+      // Create: claim allowed ONLY if document does NOT exist and UID matches authenticated user
+      allow create: if isAuthenticated()
+                    && request.resource.data.uid == request.auth.uid
+                    && username.size() >= 3
+                    && username.size() <= 20
+                    && !exists(/databases/$(database)/documents/usernames/$(username));
+
+      // Prevent arbitrary clients from modifying or overwriting registered usernames
+      allow update: if false;
+
+      // Only the owning user can delete their claim
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    // Default deny for all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

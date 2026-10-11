@@ -4,9 +4,12 @@ import com.wakeus.app.data.model.ConnectionCode
 import com.wakeus.app.data.model.Friend
 import com.wakeus.app.data.model.User
 import com.wakeus.app.data.model.WakeUpState
+import com.wakeus.app.data.auth.AuthRepository
+import com.wakeus.app.data.user.UserRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlin.random.Random
 
@@ -52,36 +55,93 @@ object QalbiRepository {
         return if (id == demoFriend.id) demoFriend else null
     }
 
-    // ─── Mock authentication ─────────────────────────────────────────────────
-    /**
-     * Simulates a registration API call.
-     * Returns [Result.success] after a short delay.
-     * Passwords are validated only in memory and are NEVER stored.
-     */
+    // ─── Phase 2 Repositories ──────────────────────────────────────────────
+    val authRepository = AuthRepository()
+    val userRepository = UserRepository()
+
+    val authState: StateFlow<com.wakeus.app.data.auth.AuthState> = authRepository.authState
+
+    suspend fun registerWithEmail(
+        displayName: String,
+        username: String,
+        email: String,
+        password: String
+    ): Result<User> {
+        return if (authRepository.isFirebaseConfigured()) {
+            authRepository.registerWithEmail(displayName, username, email, password)
+        } else {
+            // Local preview when Firebase configuration is pending
+            delay(1000)
+            Result.success(
+                User(
+                    id = "local-user-" + System.currentTimeMillis().toString().takeLast(6),
+                    displayName = displayName.trim(),
+                    username = username.trim(),
+                    email = email.trim(),
+                    accountType = com.wakeus.app.data.model.AccountType.EMAIL,
+                )
+            )
+        }
+    }
+
+    suspend fun registerWithUsername(
+        displayName: String,
+        username: String,
+        password: String
+    ): Result<User> {
+        return if (authRepository.isFirebaseConfigured()) {
+            authRepository.registerWithUsername(displayName, username, password)
+        } else {
+            delay(1000)
+            Result.success(
+                User(
+                    id = "local-user-" + System.currentTimeMillis().toString().takeLast(6),
+                    displayName = displayName.trim(),
+                    username = username.trim(),
+                    email = null,
+                    accountType = com.wakeus.app.data.model.AccountType.USERNAME,
+                )
+            )
+        }
+    }
+
+    suspend fun login(
+        emailOrUsername: String,
+        password: String
+    ): Result<User> {
+        return if (authRepository.isFirebaseConfigured()) {
+            authRepository.login(emailOrUsername, password)
+        } else {
+            delay(1000)
+            val isEmail = emailOrUsername.contains("@")
+            Result.success(
+                User(
+                    id = "local-user-" + System.currentTimeMillis().toString().takeLast(6),
+                    displayName = if (isEmail) emailOrUsername.substringBefore("@") else emailOrUsername,
+                    username = emailOrUsername.substringBefore("@"),
+                    email = if (isEmail) emailOrUsername.trim() else null,
+                    accountType = if (isEmail) com.wakeus.app.data.model.AccountType.EMAIL else com.wakeus.app.data.model.AccountType.USERNAME,
+                )
+            )
+        }
+    }
+
+    fun logout(): Result<Unit> {
+        return authRepository.logout()
+    }
+
+    // ─── Legacy mock functions for Phase 1 compatibility ─────────────────────
     suspend fun mockRegister(
         displayName: String,
         username: String,
         email: String,
-        // Password is accepted here only so the ViewModel can validate length/match.
-        // It is discarded immediately after this function returns.
         @Suppress("UNUSED_PARAMETER") password: String,
-    ): Result<User> {
-        delay(1500) // Simulate network latency
-        return Result.success(demoUser.copy(displayName = displayName, username = username, email = email))
-    }
+    ): Result<User> = registerWithEmail(displayName, username, email, password)
 
-    /**
-     * Simulates a login API call.
-     * Returns [Result.success] after a short delay.
-     * Credentials are never stored.
-     */
     suspend fun mockLogin(
-        @Suppress("UNUSED_PARAMETER") emailOrUsername: String,
-        @Suppress("UNUSED_PARAMETER") password: String,
-    ): Result<User> {
-        delay(1200) // Simulate network latency
-        return Result.success(demoUser)
-    }
+        emailOrUsername: String,
+        password: String,
+    ): Result<User> = login(emailOrUsername, password)
 
     // ─── Mock connection code ─────────────────────────────────────────────────
     /**
