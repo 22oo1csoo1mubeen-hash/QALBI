@@ -1,60 +1,140 @@
-﻿# QALBI
+<p align="center">
+  <img src="assets/brand/readme-banner.svg" alt="QALBI - A little closer, every morning" width="100%">
+</p>
 
-QALBI is a native Android app for sending personal wake-up requests between connected friends. Android handles the alarm experience; Firebase stores accounts, connections, and requests; a trusted Node.js dispatcher sends remote FCM messages.
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Android-E9AEBB?style=flat-square" alt="Platform: Android">
+  <img src="https://img.shields.io/badge/Language-Kotlin-E9AEBB?style=flat-square" alt="Language: Kotlin">
+  <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-E9AEBB?style=flat-square" alt="UI: Jetpack Compose">
+  <img src="https://img.shields.io/badge/Backend-Firebase-E9AEBB?style=flat-square" alt="Backend: Firebase">
+</p>
 
-## Project layout
+<p align="center"><em>A personal wake-up call between people who care about each other.</em></p>
 
-| Folder | Purpose |
+## About QALBI
+
+QALBI is a native Android app that lets connected friends send each other wake-up requests without sharing phone numbers. The recipient can answer the request from an incoming alarm screen.
+
+## How it works
+
+```text
+Sender Android app
+      | creates request
+      v
+Firebase Firestore -> QALBI FCM dispatcher -> Firebase Cloud Messaging
+                                                   |
+                                                   v
+                                          Recipient Android alarm
+```
+
+The dispatcher is a trusted Node.js process. It reads pending Firestore requests and sends data-only FCM messages. The recipient app validates the request before starting the alarm.
+
+## Features
+
+- Private friend pairing with single-use connection codes
+- Wake-up requests with acknowledgement, decline, cancellation, and expiry
+- High-priority FCM delivery for background wake-up requests
+- Alarm playback, vibration, and full-screen lock-screen presentation
+- Account, notification, and background-delivery diagnostics
+- Firestore rules that restrict access to request participants
+
+## Repository layout
+
+| Path | Contents |
 |---|---|
-| android/ | Android Studio project, app module, Gradle wrapper, and Android build configuration |
-| backend/fcm-dispatcher/ | Trusted Firebase Admin process that sends FCM wake-up messages |
-| firebase/ | Firestore security rules to publish in Firebase Console |
-| assets/design/ | Original design references and source assets |
-| docs/ | Architecture, setup, testing, release, and historical engineering notes |
+| `android/` | Android Studio project, app module, and Gradle wrapper |
+| `backend/fcm-dispatcher/` | Firebase Admin FCM dispatcher |
+| `firebase/` | Firestore security rules |
+| `assets/design/` | Design references and source artwork |
+| `docs/` | Architecture, setup, testing, and release documentation |
 
 ## Build the Android app
 
-Requirements: Android Studio, JDK 17, and Android SDK Platform 34.
+### Requirements
 
-Place your private Firebase Android configuration at android/app/google-services.json. This file is ignored by Git. Then, from the project root:
+- Android Studio
+- JDK 17
+- Android SDK Platform 34
 
-    cd android
-    .\gradlew.bat assembleDebug
+Add your Firebase Android configuration as `android/app/google-services.json`. This project-specific file is ignored by Git and must not be committed.
 
-The debug APK is generated at android/app/build/outputs/apk/debug/app-debug.apk.
+From the repository root, build a debug APK:
 
-Run the unit tests with:
+```shell
+cd android
+./gradlew assembleDebug
+```
 
-    cd android
-    .\gradlew.bat testDebugUnitTest
+On Windows PowerShell, use `.\gradlew.bat assembleDebug` after changing into `android/`.
 
-## Firebase setup
+The APK is created at `android/app/build/outputs/apk/debug/app-debug.apk`.
 
-1. Create or select the QALBI Firebase project.
-2. Register the Android package com.wakeus.app and put its google-services.json at android/app/google-services.json.
-3. Enable Email/Password Authentication and create Cloud Firestore.
-4. Publish the rules from firebase/firestore.rules in the Firebase Console.
+## Configure Firebase
 
-## Dispatcher setup
+1. Create or select the Firebase project used by QALBI.
+2. Register the Android app with package name `com.wakeus.app`.
+3. Download its `google-services.json` and put it in `android/app/`.
+4. Enable Email/Password Authentication and create a Cloud Firestore database.
+5. Publish the rules in `firebase/firestore.rules` from the Firebase Console.
 
-The dispatcher lives in backend/fcm-dispatcher/. It needs a Firebase service-account JSON for the same Firebase project. Keep that private key out of Git and out of the Android app.
+## Run the FCM dispatcher
 
-For local development, copy .env.example to .env, place serviceAccountKey.json beside the dispatcher, then run:
+The dispatcher needs a Firebase service-account key for the **same project** as the Android app. Keep that key private; never add it to Git or the APK.
 
-    cd backend/fcm-dispatcher
-    npm install
-    npm start
+### Local development
 
-For Render, configure a Web Service with root directory backend/fcm-dispatcher, build command npm install, and start command npm start. Add the service-account JSON as a Render Secret File named serviceAccountKey.json; set GOOGLE_APPLICATION_CREDENTIALS to /etc/secrets/serviceAccountKey.json.
+1. Copy `backend/fcm-dispatcher/.env.example` to `.env` in that folder.
+2. Put the service-account JSON beside `dispatcher.js` as `serviceAccountKey.json`.
+3. Run:
 
-Render's free Web Service can spin down when idle and may restart or exhaust the shared monthly free-hour allowance. A free uptime monitor can reduce idle spin-down, but this setup is best-effort and does not guarantee uninterrupted alarm delivery.
+   ```shell
+   cd backend/fcm-dispatcher
+   npm install
+   npm start
+   ```
+
+### Render free Web Service
+
+Create a **Web Service** from this repository with:
+
+| Render setting | Value |
+|---|---|
+| Root Directory | `backend/fcm-dispatcher` |
+| Build Command | `npm install` |
+| Start Command | `npm start` |
+| Instance Type | `Free` |
+
+Then, in **Environment -> Secret Files**, add:
+
+- **Filename:** `serviceAccountKey.json`
+- **Contents:** the entire downloaded Firebase service-account JSON file
+
+Add this environment variable:
+
+| Key | Value |
+|---|---|
+| `GOOGLE_APPLICATION_CREDENTIALS` | `/etc/secrets/serviceAccountKey.json` |
+
+After deployment, the logs should include `Authenticated via Service Account JSON` and `Listening for incoming wake-up requests`. The health endpoint is `https://YOUR-SERVICE.onrender.com/health`.
+
+Render's free service may spin down while idle, restart, or reach its shared monthly free-hour limit. A free uptime monitor checking `/health` every five minutes can reduce idle spin-down, but this is best-effort and does **not** guarantee uninterrupted alarm delivery.
+
+## Important delivery limits
+
+- A phone that is powered off cannot receive an internet push.
+- Android force-stop prevents background message handling until QALBI is opened again.
+- FCM acceptance does not prove that a device received or played the alarm.
+- Delivery can be affected by connectivity, notification permissions, Android power management, and free-host interruptions.
 
 ## Documentation
 
-- [Architecture and alarm reliability](docs/architecture/ALARM_RELIABILITY_REPORT.md)
-- [Moto G34 device guide](docs/architecture/MOTO_G34_TEST_GUIDE.md)
-- [Manual test guide](docs/guides/MANUAL_TESTING_GUIDE.md)
-- [Release checklist](docs/release/RELEASE_CHECKLIST.md)
 - [Project overview](docs/project-overview.md)
-- [Engineering reports](docs/reports/)
+- [Alarm reliability investigation](docs/architecture/ALARM_RELIABILITY_REPORT.md)
+- [Moto G34 device guide](docs/architecture/MOTO_G34_TEST_GUIDE.md)
+- [Manual testing guide](docs/guides/MANUAL_TESTING_GUIDE.md)
+- [Release checklist](docs/release/RELEASE_CHECKLIST.md)
+- [Documentation index](docs/README.md)
 
+## Security
+
+Never commit `.env`, `serviceAccountKey.json`, signing keys, or private credentials. The Android `google-services.json` is local project configuration and is ignored by Git in this repository.
