@@ -34,6 +34,8 @@ import com.wakeus.app.ui.splash.SplashScreen
 import com.wakeus.app.ui.wakeup.IncomingRequestScreen
 import com.wakeus.app.ui.wakeup.WakeUpEmptyTabScreen
 import com.wakeus.app.ui.wakeup.WakeUpScreen
+import com.wakeus.app.ui.wakeup.ScheduleAlarmScreen
+import com.wakeus.app.ui.wakeup.ScheduledAlarmsScreen
 import com.wakeus.app.ui.welcome.WelcomeScreen
 import kotlinx.coroutines.launch
 
@@ -86,7 +88,7 @@ fun AppNavigation(
     val (isBottomBarVisible, selectedTab) = when {
         currentRoute == Screen.Home.route -> true to QalbiNavTab.HOME
         currentRoute == Screen.ConnectedFriends.route -> true to QalbiNavTab.FRIENDS
-        currentRoute == Screen.WakeUpTab.route || currentRoute == Screen.WakeUp.route || currentRoute?.startsWith("wake_up") == true -> true to QalbiNavTab.WAKE_UP
+        currentRoute == Screen.WakeUpTab.route || currentRoute == Screen.WakeUp.route || currentRoute?.startsWith("wake_up") == true || currentRoute?.startsWith("schedule_alarm") == true || currentRoute == Screen.ScheduledAlarms.route -> true to QalbiNavTab.WAKE_UP
         currentRoute == Screen.Settings.route -> true to QalbiNavTab.SETTINGS
         else -> false to QalbiNavTab.HOME
     }
@@ -273,6 +275,7 @@ fun AppNavigation(
                         friendId = friendId,
                         onBack   = { navController.popBackStack() },
                         onWakeUp = { id -> navController.navigate(Screen.WakeUp.withId(id)) },
+                        onScheduleAlarm = { id -> navController.navigate(Screen.ScheduleAlarm.withId(id)) },
                     )
                 }
 
@@ -281,6 +284,7 @@ fun AppNavigation(
                     if (friends.isNotEmpty()) {
                         WakeUpScreen(
                             friendId = friends.first().id,
+                            onManageSchedules = { navController.navigate(Screen.ScheduledAlarms.route) },
                             onBack = {
                                 if (!navController.popBackStack()) {
                                     navController.navigate(Screen.Home.route) {
@@ -303,6 +307,7 @@ fun AppNavigation(
                     val friendId = backStackEntry.arguments?.getString("friendId") ?: ""
                     WakeUpScreen(
                         friendId = friendId,
+                        onManageSchedules = { navController.navigate(Screen.ScheduledAlarms.route) },
                         onBack = {
                             if (!navController.popBackStack()) {
                                 navController.navigate(Screen.Home.route) {
@@ -311,6 +316,18 @@ fun AppNavigation(
                             }
                         },
                     )
+                }
+
+                composable(
+                    route = Screen.ScheduleAlarm.route,
+                    arguments = listOf(navArgument("friendId") { type = NavType.StringType }),
+                ) { backStackEntry ->
+                    val friendId = backStackEntry.arguments?.getString("friendId") ?: ""
+                    ScheduleAlarmScreen(friendId = friendId, onBack = { navController.popBackStack() })
+                }
+
+                composable(Screen.ScheduledAlarms.route) {
+                    ScheduledAlarmsScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable(

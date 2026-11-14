@@ -4,14 +4,12 @@ import android.app.ActivityManager
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.Manifest
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.os.Build
 import android.os.PowerManager
-import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,18 +19,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -47,7 +39,6 @@ import com.wakeus.app.data.fcm.NotificationHelper
 
 private val ReliabilityInk = Color(0xFF301019)
 private val ReliabilityMuted = Color(0xFF7C5560)
-private val ReliabilityAccent = Color(0xFF8B253E)
 private val ReliabilityCard = Color(0xFFFFF9FA)
 private val ReliabilityBorder = Color(0xFFF3D4DC)
 
@@ -123,10 +114,7 @@ object AlarmReliabilityDiagnostics {
 @Composable
 fun BackgroundAlarmReliabilitySection() {
     val context = LocalContext.current
-    var refresh by remember { mutableIntStateOf(0) }
-    val checks = remember(context, refresh) { AlarmReliabilityDiagnostics.collect(context) }
-    val manufacturer = Build.MANUFACTURER.orEmpty()
-    val isMotorola = manufacturer.contains("motorola", ignoreCase = true) || Build.BRAND.contains("motorola", ignoreCase = true)
+    val checks = AlarmReliabilityDiagnostics.collect(context)
 
     SettingsSectionHeader(
         title = "Background Alarm Reliability",
@@ -141,7 +129,7 @@ fun BackgroundAlarmReliabilitySection() {
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text(
-                "Run Alarm Health Check",
+                "Alarm Health Status",
                 color = ReliabilityInk,
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
@@ -178,65 +166,12 @@ fun BackgroundAlarmReliabilitySection() {
                 color = ReliabilityMuted,
                 fontSize = 11.sp,
             )
-            AlarmDiagnostics.lastFailure(context)?.let { failure ->
-                Text("Last known failure: $failure", color = Color(0xFF9D253F), fontSize = 11.sp)
-            }
-            Spacer(Modifier.height(12.dp))
-            ReliabilityButton("Run Alarm Health Check") { refresh++ }
-            ReliabilityButton("Open notification settings") {
-                openSettings(context, Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
-            }
-            ReliabilityButton("Open battery optimization settings") {
-                openSettings(context, Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-            }
-            ReliabilityButton("Open app info") { openAppInfo(context) }
-            ReliabilityButton("Full-screen alarm access") {
-                if (Build.VERSION.SDK_INT >= 34) {
-                    openSettings(context, Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).setData(android.net.Uri.parse("package:${context.packageName}")))
-                } else {
-                    openSettings(context, Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
-                }
-            }
-            ReliabilityButton("Export diagnostic report") {
-                val report = AlarmDiagnostics.exportReport(context, checks.map { it.name to it.status })
-                val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "QALBI alarm diagnostics")
-                    putExtra(Intent.EXTRA_TEXT, report)
-                }
-                val chooser = Intent.createChooser(sendIntent, "Export alarm diagnostics").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                runCatching { context.startActivity(chooser) }
-            }
-            if (isMotorola) {
-                Spacer(Modifier.height(10.dp))
-                Text("Motorola background guidance", color = ReliabilityInk, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                Text(
-                    "Menu names vary by Android version and Motorola software. Check Settings → Apps → QALBI → App battery usage and allow background use or choose unrestricted use if offered. Confirm background data and notifications are allowed. Test Battery Saver separately; leave global battery features unchanged unless you want to compare behavior.",
-                    color = ReliabilityMuted,
-                    fontSize = 12.sp,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Force-stopping QALBI blocks Android background delivery until you launch it again. A powered-off phone cannot receive alarms. Delivery also depends on network access and the device's power policies.",
-                color = ReliabilityMuted,
-                fontSize = 11.sp,
-            )
         }
     }
     Spacer(Modifier.height(22.dp))
 }
 
-@Composable
-private fun ReliabilityButton(label: String, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().padding(top = 5.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDECEF), contentColor = ReliabilityAccent),
-    ) {
-        Text(label, fontSize = 12.sp)
-    }
-}
+private fun formatDiagnosticTime(epochMillis: Long): String = java.text.DateFormat.getDateTimeInstance().format(java.util.Date(epochMillis))
 
 private fun statusColor(value: String): Color = when {
     value.startsWith("Enabled") || value.startsWith("Available") || value.startsWith("Unrestricted") ||
@@ -245,18 +180,3 @@ private fun statusColor(value: String): Color = when {
         value.startsWith("Needs attention") || value == "Optimized" -> Color(0xFF9D253F)
     else -> ReliabilityMuted
 }
-
-private fun openSettings(context: Context, intent: Intent) {
-    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    try {
-        context.startActivity(intent)
-    } catch (_: Exception) {
-        openAppInfo(context)
-    }
-}
-
-private fun openAppInfo(context: Context) {
-    openSettings(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(android.net.Uri.parse("package:${context.packageName}")))
-}
-
-private fun formatDiagnosticTime(epochMillis: Long): String = java.text.DateFormat.getDateTimeInstance().format(java.util.Date(epochMillis))

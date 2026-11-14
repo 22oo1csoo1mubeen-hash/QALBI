@@ -78,6 +78,7 @@ private val CardBorderColor = Color(0xFFF3D4DC)
 fun WakeUpScreen(
     friendId: String,
     onBack: () -> Unit,
+    onManageSchedules: () -> Unit = {},
     viewModel: WakeUpViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -569,6 +570,17 @@ fun WakeUpScreen(
                                 )
                             }
                         }
+                    }
+
+                    OutlinedButton(
+                        onClick = onManageSchedules,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(26.dp),
+                        border = BorderStroke(1.2.dp, Color(0xFFE5A6B3)),
+                    ) {
+                        Icon(Icons.Filled.Schedule, contentDescription = null, tint = DeepWinePrimary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Manage Scheduled Alarms", color = DeepWinePrimary, fontWeight = FontWeight.SemiBold)
                     }
 
                     Spacer(Modifier.height(32.dp))

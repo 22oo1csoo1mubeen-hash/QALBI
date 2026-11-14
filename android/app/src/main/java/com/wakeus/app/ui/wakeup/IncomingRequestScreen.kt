@@ -327,6 +327,17 @@ fun IncomingRequestScreen(
                         textAlign = TextAlign.Center,
                     )
 
+                    if (request.customMessage.isNotBlank()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = "“${request.customMessage}”",
+                            fontFamily = FontFamily.Serif,
+                            fontSize = 17.sp,
+                            color = DeepWinePrimary,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+
                     Spacer(Modifier.height(24.dp))
 
                     // Request status card

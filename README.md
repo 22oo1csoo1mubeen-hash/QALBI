@@ -41,6 +41,12 @@ If QALBI is open on the recipient's phone, its active Firestore listener can als
 
 The recipient can acknowledge or decline from the alarm screen. That response updates the request in Firestore, and the sender sees the new status. The sender can cancel a pending request; requests also expire after 15 minutes. When a request is acknowledged, declined, cancelled, or expires, QALBI stops the corresponding alarm.
 
+### 5. Schedule a future alarm for a friend
+
+From a connected friend's profile, choose **Schedule Alarm**, select a future date and time, and optionally add a message. The app stores the schedule in Firestore with a UTC execution instant and the sender's timezone. Cloudflare's free Cron Worker checks due schedules once a minute, rechecks connection and block status, and sends the same QALBI FCM request format. This does not depend on the sender's phone being online. Schedule creation and cancellation are limited by Firestore rules to the authenticated sender. Deployment is not automatic: publish the rules/indexes, configure the Cloudflare service-account secret, and deploy the Worker using [`backend/cloudflare-scheduler/README.md`](backend/cloudflare-scheduler/README.md).
+
+The free Worker is best-effort, not an exact-time or uninterrupted delivery guarantee. A minute-level job can be delayed by provider outages or trigger propagation. `SENT` means FCM accepted at least one device send; it cannot prove that the recipient's phone received or played it.
+
 ### Application architecture
 
 - **Compose screens** display sign-in, friends, pairing, wake-up, incoming alarm, and settings flows.
@@ -65,6 +71,7 @@ Sender app -> Firestore request -> FCM dispatcher -> Firebase Cloud Messaging
 
 - Private friend pairing with single-use connection codes
 - Wake-up requests with acknowledgement, decline, cancellation, and expiry
+- Future friend alarms with custom messages, schedule list, cancellation, and status tracking (requires Cloudflare Worker deployment)
 - High-priority FCM delivery for background wake-up requests
 - Alarm playback, vibration, and full-screen lock-screen presentation
 - Account, notification, and background-delivery diagnostics
@@ -75,8 +82,9 @@ Sender app -> Firestore request -> FCM dispatcher -> Firebase Cloud Messaging
 | Path | Contents |
 |---|---|
 | `android/` | Android Studio project, app module, and Gradle wrapper |
-| `backend/fcm-dispatcher/` | Firebase Admin FCM dispatcher |
-| `firebase/` | Firestore security rules |
+| `backend/fcm-dispatcher/` | Firebase Admin dispatcher for immediate alarms |
+| `backend/cloudflare-scheduler/` | Minute-based free-tier Worker for scheduled alarms |
+| `firebase/` | Firestore security rules, indexes, and Firebase CLI configuration |
 | `assets/design/` | Design references and source artwork |
 | `docs/` | Architecture, setup, testing, and release documentation |
 
@@ -151,6 +159,10 @@ After deployment, the logs should include `Authenticated via Service Account JSO
 
 Render's free service may spin down while idle, restart, or reach its shared monthly free-hour limit. A free uptime monitor checking `/health` every five minutes can reduce idle spin-down, but this is best-effort and does **not** guarantee uninterrupted alarm delivery.
 
+## Deploy scheduled alarms
+
+Scheduled alarms use a separate Cloudflare Worker so they do not rely on the sender's device or the Render listener's in-memory timers. Follow [`backend/cloudflare-scheduler/README.md`](backend/cloudflare-scheduler/README.md) to deploy Firestore rules/indexes and the Worker secret/cron trigger. Keep the Render dispatcher for existing immediate alarms. Do not claim scheduled alarms are live until the Worker Cron Trigger is deployed and a two-device test succeeds.
+
 ## Important delivery limits
 
 - A phone that is powered off cannot receive an internet push.
@@ -162,6 +174,7 @@ Render's free service may spin down while idle, restart, or reach its shared mon
 
 - [Project overview](docs/project-overview.md)
 - [Alarm reliability investigation](docs/architecture/ALARM_RELIABILITY_REPORT.md)
+- [Friend alarm scheduling implementation and deployment report](docs/reports/QALBI_V2_SCHEDULING_REPORT.md)
 - [Moto G34 device guide](docs/architecture/MOTO_G34_TEST_GUIDE.md)
 - [Manual testing guide](docs/guides/MANUAL_TESTING_GUIDE.md)
 - [Release checklist](docs/release/RELEASE_CHECKLIST.md)

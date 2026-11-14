@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PersonRemove
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -76,6 +77,7 @@ fun FriendDetailScreen(
     friendId: String,
     onBack: () -> Unit,
     onWakeUp: (String) -> Unit,
+    onScheduleAlarm: (String) -> Unit,
     viewModel: FriendDetailViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -335,6 +337,20 @@ fun FriendDetailScreen(
                         modifier = Modifier.fillMaxWidth(),
                         leadingIcon = Icons.Default.Alarm,
                     )
+
+                    Spacer(Modifier.height(14.dp))
+
+                    OutlinedButton(
+                        onClick = { onScheduleAlarm(friend.id) },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(26.dp),
+                        border = BorderStroke(1.2.dp, Color(0xFFE5A6B3)),
+                        enabled = !uiState.isActionInProgress,
+                    ) {
+                        Icon(Icons.Filled.Schedule, contentDescription = null, tint = DeepWine, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Schedule Alarm", color = DeepWine, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
 
                     Spacer(Modifier.height(14.dp))
 

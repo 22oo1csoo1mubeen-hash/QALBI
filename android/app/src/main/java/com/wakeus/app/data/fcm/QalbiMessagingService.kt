@@ -64,7 +64,8 @@ class QalbiMessagingService : FirebaseMessagingService() {
             senderUid = payload.senderUid,
             senderDisplayName = payload.senderDisplayName,
             senderUsername = payload.senderUsername,
-            expiresAt = payload.expiresAt
+            expiresAt = payload.expiresAt,
+            customMessage = payload.customMessage,
         )
     }
 }

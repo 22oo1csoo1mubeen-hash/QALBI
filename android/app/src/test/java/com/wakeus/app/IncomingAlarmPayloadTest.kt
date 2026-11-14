@@ -25,6 +25,25 @@ class IncomingAlarmPayloadTest {
     }
 
     @Test
+    fun `keeps the optional scheduled alarm message within the payload limit`() {
+        val result = IncomingAlarmPayloadValidator.validate(
+            validMessage + ("customMessage" to "Wake up, friend! ❤️"),
+            "receiver-1",
+            1_999_999_999_000,
+        )
+        assertTrue(result is IncomingAlarmPayloadResult.Valid)
+        assertEquals("Wake up, friend! ❤️", (result as IncomingAlarmPayloadResult.Valid).payload.customMessage)
+
+        val longMessageResult = IncomingAlarmPayloadValidator.validate(
+            validMessage + ("customMessage" to "a".repeat(200)),
+            "receiver-1",
+            1_999_999_999_000,
+        )
+        assertTrue(longMessageResult is IncomingAlarmPayloadResult.Valid)
+        assertEquals(160, (longMessageResult as IncomingAlarmPayloadResult.Valid).payload.customMessage.length)
+    }
+
+    @Test
     fun `rejects request addressed to a different user`() {
         val result = IncomingAlarmPayloadValidator.validate(validMessage, "other-user", 1_999_999_999_000)
         assertEquals("recipient_mismatch", (result as IncomingAlarmPayloadResult.Rejected).reason)

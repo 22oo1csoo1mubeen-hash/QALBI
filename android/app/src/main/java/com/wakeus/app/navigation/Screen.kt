@@ -19,6 +19,10 @@ sealed class Screen(val route: String) {
     object WakeUp           : Screen("wake_up/{friendId}") {
         fun withId(friendId: String) = "wake_up/$friendId"
     }
+    object ScheduleAlarm    : Screen("schedule_alarm/{friendId}") {
+        fun withId(friendId: String) = "schedule_alarm/$friendId"
+    }
+    object ScheduledAlarms  : Screen("scheduled_alarms")
     object IncomingRequest  : Screen("incoming_request/{requestId}") {
         fun withId(requestId: String) = "incoming_request/$requestId"
     }

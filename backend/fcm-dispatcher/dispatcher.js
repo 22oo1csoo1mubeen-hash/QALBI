@@ -80,6 +80,12 @@ async function processWakeUpRequest(doc) {
         return;
     }
 
+    // Scheduled requests are sent directly by the Cloudflare Cron worker.
+    // Keep the Render listener from delivering a duplicate FCM message.
+    if (data.deliverySource === 'CLOUDFLARE_SCHEDULED_ALARM') {
+        return;
+    }
+
     const expiresAt = timestampToMillis(data.expiresAt);
     const now = Date.now();
     if (!Number.isFinite(expiresAt) || expiresAt <= now) {

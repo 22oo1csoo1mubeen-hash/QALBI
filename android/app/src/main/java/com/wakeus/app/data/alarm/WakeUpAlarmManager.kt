@@ -40,6 +40,7 @@ object WakeUpAlarmManager {
         senderDisplayName: String,
         senderUsername: String,
         expiresAt: Long = System.currentTimeMillis() + 15 * 60 * 1000L,
+        customMessage: String = "",
     ): Boolean {
         var current = _alarmState.value
 
@@ -93,6 +94,7 @@ object WakeUpAlarmManager {
             putExtra("senderDisplayName", senderDisplayName)
             putExtra("senderUsername", senderUsername)
             putExtra("expiresAt", expiresAt)
+            putExtra("customMessage", customMessage)
         }
 
         try {

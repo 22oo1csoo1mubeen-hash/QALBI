@@ -65,6 +65,7 @@ object QalbiRepository {
     val userRepository = UserRepository()
     val friendRepository = com.wakeus.app.data.friends.FriendRepository()
     val wakeUpRepository = com.wakeus.app.data.wakeup.WakeUpRepository()
+    val scheduledAlarmRepository = com.wakeus.app.data.wakeup.ScheduledAlarmRepository()
     val fcmTokenRepository = com.wakeus.app.data.fcm.FcmTokenRepository()
 
     val authState: StateFlow<com.wakeus.app.data.auth.AuthState> = authRepository.authState

@@ -6,6 +6,7 @@ data class IncomingAlarmPayload(
     val senderDisplayName: String,
     val senderUsername: String,
     val expiresAt: Long,
+    val customMessage: String = "",
 )
 
 sealed class IncomingAlarmPayloadResult {
@@ -36,6 +37,7 @@ object IncomingAlarmPayloadValidator {
                 senderDisplayName = data["senderDisplayName"]?.takeIf(String::isNotBlank) ?: "Your friend",
                 senderUsername = data["senderUsername"]?.takeIf(String::isNotBlank) ?: "friend",
                 expiresAt = expiresAt,
+                customMessage = data["customMessage"]?.take(160).orEmpty(),
             ),
         )
     }

@@ -224,6 +224,58 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ─── Scheduled Alarms: /scheduledAlarms/{scheduleId} ──────────────────
+    // Clients may create an authenticated future job and cancel it while pending.
+    // Only the trusted scheduled worker can claim or execute jobs.
+    match /scheduledAlarms/{scheduleId} {
+      allow read: if isAuthenticated() && resource.data.senderUid == request.auth.uid;
+
+      allow create: if isAuthenticated()
+                    && request.resource.data.keys().hasOnly([
+                      "scheduleId", "senderUid", "senderDisplayName", "senderUsername",
+                      "receiverUid", "receiverDisplayName", "receiverUsername", "connectionId",
+                      "message", "scheduledAt", "timeZoneId", "status", "attemptCount",
+                      "nextAttemptAt", "createdAt", "updatedAt", "schemaVersion"
+                    ])
+                    && request.resource.data.scheduleId == scheduleId
+                    && request.resource.data.senderUid == request.auth.uid
+                    && request.resource.data.receiverUid is string
+                    && request.resource.data.receiverUid != request.auth.uid
+                    && request.resource.data.connectionId is string
+                    && request.resource.data.status == "SCHEDULED"
+                    && request.resource.data.attemptCount == 0
+                    && request.resource.data.schemaVersion == 1
+                    && request.resource.data.scheduledAt is timestamp
+                    && request.resource.data.scheduledAt > request.time
+                    && request.resource.data.scheduledAt <= request.time + duration.value(366, 'd')
+                    && request.resource.data.nextAttemptAt == request.resource.data.scheduledAt
+                    && request.resource.data.createdAt == request.time
+                    && request.resource.data.updatedAt == request.time
+                    && request.resource.data.timeZoneId is string
+                    && request.resource.data.timeZoneId.size() <= 80
+                    && request.resource.data.message is string
+                    && request.resource.data.message.size() <= 160
+                    && exists(/databases/$(database)/documents/connections/$(request.resource.data.connectionId))
+                    && get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.status == "CONNECTED"
+                    && get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.memberUids.size() == 2
+                    && request.auth.uid in get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.memberUids
+                    && request.resource.data.receiverUid in get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.memberUids
+                    && !exists(/databases/$(database)/documents/userBlocks/$(request.auth.uid)/blockedUsers/$(request.resource.data.receiverUid))
+                    && !exists(/databases/$(database)/documents/userBlocks/$(request.resource.data.receiverUid)/blockedUsers/$(request.auth.uid));
+
+      allow update: if isAuthenticated()
+                    && resource.data.senderUid == request.auth.uid
+                    && resource.data.status == "SCHEDULED"
+                    && request.resource.data.status == "CANCELLED"
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                      "status", "cancelledAt", "updatedAt"
+                    ])
+                    && request.resource.data.cancelledAt == request.time
+                    && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
     // ─── Default Deny ────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
