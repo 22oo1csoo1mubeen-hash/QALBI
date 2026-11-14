@@ -87,8 +87,10 @@ function createMockFetch({ connectionStatus = "CONNECTED" } = {}) {
       return state.request ? response(state.request) : response({ error: { status: "NOT_FOUND" } }, 404);
     }
     if (url.pathname.endsWith("/wakeUpRequests") && options.method === "POST") {
+      const requestBody = JSON.parse(options.body);
+      assert.equal("name" in requestBody, false);
       state.createdRequests += 1;
-      state.request = makeFirestoreDocument(requestName, JSON.parse(options.body).fields);
+      state.request = makeFirestoreDocument(requestName, requestBody.fields);
       return response(state.request);
     }
     if (options.method === "PATCH") {

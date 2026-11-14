@@ -501,7 +501,7 @@ class FirestoreRest {
     const [collectionId, documentId] = [path.slice(0, path.lastIndexOf("/")), path.slice(path.lastIndexOf("/") + 1)];
     const url = `${this.base}/${collectionId}?documentId=${encodeURIComponent(documentId)}`;
     try {
-      return await this.request(url, { method: "POST", body: JSON.stringify({ name, fields: encodeFields(data) }) });
+      return await this.request(url, { method: "POST", body: JSON.stringify({ fields: encodeFields(data) }) });
     } catch (error) {
       if (error.code === "ALREADY_EXISTS") {
         const existing = await this.get(name);
