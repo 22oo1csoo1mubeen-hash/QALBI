@@ -15,19 +15,51 @@
 
 QALBI is a native Android app that lets connected friends send each other wake-up requests without sharing phone numbers. The recipient can answer the request from an incoming alarm screen.
 
-## How it works
+## How the application works
+
+### 1. Set up accounts and connect friends
+
+Each person installs QALBI, creates an account, and signs in through Firebase Authentication. One person generates a temporary, single-use pairing code; the other enters and redeems it. Firestore records the connection so QALBI can show them as friends.
+
+### 2. Create a wake-up request
+
+The sender selects a connected friend, taps **Wake Up**, and confirms. Before saving the request, QALBI checks that the friend connection is active and that the request is allowed. It then writes a `PENDING` request with sender and recipient details and an expiry time to Cloud Firestore. The sender's app watches that request for status changes.
+
+### 3. Deliver the request to the recipient
+
+The recipient app registers its Firebase Cloud Messaging (FCM) device token with Firestore. For background delivery, the trusted Node.js dispatcher must be running on its host:
+
+1. The dispatcher watches Firestore for pending wake-up requests.
+2. It verifies the connection and block status, then finds the recipient's registered FCM tokens.
+3. It sends a high-priority, data-only push through Firebase Cloud Messaging.
+4. QALBI on the recipient's phone checks that the message is for the signed-in user and has not expired.
+5. If valid, QALBI starts its alarm foreground service, which plays the alarm and shows the alarm notification.
+
+If QALBI is open on the recipient's phone, its active Firestore listener can also show incoming request state. The dispatcher and FCM are the route for waking the app when it is in the background.
+
+### 4. Respond and finish the request
+
+The recipient can acknowledge or decline from the alarm screen. That response updates the request in Firestore, and the sender sees the new status. The sender can cancel a pending request; requests also expire after 15 minutes. When a request is acknowledged, declined, cancelled, or expires, QALBI stops the corresponding alarm.
+
+### Application architecture
+
+- **Compose screens** display sign-in, friends, pairing, wake-up, incoming alarm, and settings flows.
+- **ViewModels** manage each screen's state and user actions.
+- **Repositories** validate operations and read or write Firebase data.
+- **Firebase Authentication and Firestore** manage identity, connections, tokens, and request state.
+- **FCM dispatcher** performs privileged server-side push delivery; its service-account key is never stored in the Android app.
+- **Alarm components** validate incoming messages and manage alarm audio, vibration, notification actions, and foreground-service lifetime.
 
 ```text
-Sender Android app
-      | creates request
-      v
-Firebase Firestore -> QALBI FCM dispatcher -> Firebase Cloud Messaging
-                                                   |
-                                                   v
-                                          Recipient Android alarm
+Sender app -> Firestore request -> FCM dispatcher -> Firebase Cloud Messaging
+                                                           |
+                                                           v
+                                             Recipient QALBI alarm
+                                                           |
+                                      acknowledge / decline / expire
+                                                           v
+                                         Firestore -> sender status
 ```
-
-The dispatcher is a trusted Node.js process. It reads pending Firestore requests and sends data-only FCM messages. The recipient app validates the request before starting the alarm.
 
 ## Features
 
