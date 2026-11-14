@@ -33,4 +33,6 @@ A free external uptime monitor that requests /health every five minutes can redu
 3. It loads receiver tokens from users/{receiverUid}/fcmTokens and sends data-only FCM.
 4. The Android messaging service validates recipient and expiry, then starts the alarm foreground service.
 
+The app's 15-minute expiry is checked against Firestore's 30-minute clock-skew allowance; FCM delivery itself is still capped at 15 minutes. This avoids rejecting otherwise valid requests when a phone clock differs slightly from the dispatcher.
+
 ACCEPTED_BY_FCM means FCM accepted a send; it does not confirm that the device received or displayed the alarm. See the [alarm reliability report](../../docs/architecture/ALARM_RELIABILITY_REPORT.md) and [Moto G34 guide](../../docs/architecture/MOTO_G34_TEST_GUIDE.md).

@@ -15,7 +15,13 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const admin = require('firebase-admin');
-const { timestampToMillis, remainingTtlMillis } = require('./dispatch-policy');
+const {
+    MAX_REQUEST_EXPIRY_AHEAD_MS,
+    MAX_REQUEST_TTL_MS,
+    isExpiryWithinHorizon,
+    timestampToMillis,
+    remainingTtlMillis
+} = require('./dispatch-policy');
 
 // 1. Initialize Firebase Admin SDK
 const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS ||
@@ -55,7 +61,6 @@ const messaging = admin.messaging();
 const dispatchedRequests = new Set();
 const retryAttempts = new Map();
 const MAX_RETRIES = 5;
-const MAX_REQUEST_TTL_MS = 15 * 60 * 1000;
 
 /**
  * Masks an FCM registration token for safe logging without exposing full routing secrets.
@@ -97,7 +102,7 @@ async function processWakeUpRequest(doc) {
         dispatchedRequests.delete(requestId);
         return;
     }
-    if (expiresAt - now > MAX_REQUEST_TTL_MS) {
+    if (!isExpiryWithinHorizon(expiresAt, now, MAX_REQUEST_EXPIRY_AHEAD_MS)) {
         await doc.ref.update({
             fcmDispatchState: 'REJECTED_INVALID_EXPIRY',
             fcmRetryExhausted: true,
@@ -206,7 +211,7 @@ async function processWakeUpRequest(doc) {
             },
             android: {
                 priority: 'high',
-                ttl: remainingTtlMillis(expiresAt, now)
+                ttl: remainingTtlMillis(expiresAt, now, MAX_REQUEST_TTL_MS)
             }
         };
 
