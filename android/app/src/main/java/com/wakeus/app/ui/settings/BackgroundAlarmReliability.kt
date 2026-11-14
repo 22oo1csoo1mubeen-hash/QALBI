@@ -2,14 +2,21 @@ package com.wakeus.app.ui.settings
 
 import android.app.ActivityManager
 import android.app.NotificationManager
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.Manifest
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.net.ConnectivityManager
 import android.os.Build
 import android.os.PowerManager
+import android.provider.Settings
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,12 +26,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -114,7 +126,14 @@ object AlarmReliabilityDiagnostics {
 @Composable
 fun BackgroundAlarmReliabilitySection() {
     val context = LocalContext.current
-    val checks = AlarmReliabilityDiagnostics.collect(context)
+    var checks by remember(context) { mutableStateOf(AlarmReliabilityDiagnostics.collect(context)) }
+    val fullScreenSettingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        checks = AlarmReliabilityDiagnostics.collect(context)
+    }
+    val fullScreenAccessUnavailable = Build.VERSION.SDK_INT >= 34 &&
+        checks.any { it.name == "Full-screen alarm access" && it.status == "Not available" }
 
     SettingsSectionHeader(
         title = "Background Alarm Reliability",
@@ -148,6 +167,45 @@ fun BackgroundAlarmReliabilitySection() {
                 ) {
                     Text(check.name, color = ReliabilityInk, fontSize = 12.sp, modifier = Modifier.weight(1f))
                     Text(check.status, color = statusColor(check.status), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            if (fullScreenAccessUnavailable) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Android requires your approval. Tap below, then enable Allow full-screen notifications for QALBI. Do this on each phone.",
+                    color = ReliabilityMuted,
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        val appUri = Uri.parse("package:${context.packageName}")
+                        val fullScreenIntent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+                            data = appUri
+                        }
+                        try {
+                            fullScreenSettingsLauncher.launch(fullScreenIntent)
+                        } catch (_: ActivityNotFoundException) {
+                            val appSettingsIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = appUri
+                            }
+                            try {
+                                fullScreenSettingsLauncher.launch(appSettingsIntent)
+                            } catch (_: ActivityNotFoundException) {
+                                Toast.makeText(
+                                    context,
+                                    "Open QALBI's Android app settings to allow full-screen notifications.",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF8B253E),
+                    ),
+                ) {
+                    Text("Open full-screen alarm settings", color = Color.White)
                 }
             }
             val lastRegistration = AlarmDiagnostics.tokenRegisteredAt(context)

@@ -11,6 +11,12 @@
 
 <p align="center"><em>A personal wake-up call between people who care about each other.</em></p>
 
+## Current project status
+
+QALBI Version 2 is complete in the codebase and includes the scheduled friend-alarm feature set, updated Android UX, Cloudflare Worker automation, operational safeguards, and associated backend tests.
+
+The implementation is ready for deployment setup, but it is not yet live until the Firebase rules/indexes, Cloudflare secret/cron configuration, and a live two-device validation are completed in the target environment.
+
 ## About QALBI
 
 QALBI is a native Android app that lets connected friends send each other wake-up requests without sharing phone numbers. The recipient can answer the request from an incoming alarm screen.

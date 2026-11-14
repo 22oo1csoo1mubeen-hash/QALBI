@@ -85,6 +85,22 @@ private val ScheduleMuted = Color(0xFF7C5560)
 private val ScheduleCard = Color(0xFFFFF9FA)
 private val ScheduleBorder = Color(0xFFF3D4DC)
 
+internal fun defaultScheduledAlarmTime(nowMillis: Long = System.currentTimeMillis()): Calendar =
+    Calendar.getInstance().apply {
+        timeInMillis = nowMillis
+        add(Calendar.MINUTE, 3)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+
+internal fun scheduledAlarmTimeMillis(date: Calendar, time: Calendar): Long =
+    (date.clone() as Calendar).apply {
+        set(Calendar.HOUR_OF_DAY, time.get(Calendar.HOUR_OF_DAY))
+        set(Calendar.MINUTE, time.get(Calendar.MINUTE))
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
 @Composable
 fun ScheduleAlarmScreen(
     friendId: String,
@@ -100,13 +116,20 @@ fun ScheduleAlarmScreen(
     val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf("") }
     var currentTimeMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
-    var selectedTime by remember { mutableStateOf(Calendar.getInstance()) }
+    var hasSelectedDate by remember { mutableStateOf(false) }
+    var hasSelectedTime by remember { mutableStateOf(false) }
+    val defaultScheduleTime = remember { defaultScheduledAlarmTime() }
+    var selectedDate by remember { mutableStateOf(defaultScheduleTime.clone() as Calendar) }
+    var selectedTime by remember { mutableStateOf(defaultScheduleTime.clone() as Calendar) }
 
     LaunchedEffect(Unit) {
         while (true) {
             delay(30_000L)
-            currentTimeMillis = System.currentTimeMillis()
+            val now = System.currentTimeMillis()
+            currentTimeMillis = now
+            val nextDefault = defaultScheduledAlarmTime(now)
+            if (!hasSelectedDate) selectedDate = nextDefault.clone() as Calendar
+            if (!hasSelectedTime) selectedTime = nextDefault.clone() as Calendar
         }
     }
 
@@ -196,6 +219,7 @@ fun ScheduleAlarmScreen(
                             onClick = {
                                 val c = selectedDate.clone() as Calendar
                                 DatePickerDialog(context, { _, year, month, day ->
+                                    hasSelectedDate = true
                                     selectedDate = (selectedDate.clone() as Calendar).apply {
                                         set(Calendar.YEAR, year); set(Calendar.MONTH, month); set(Calendar.DAY_OF_MONTH, day)
                                     }
@@ -215,6 +239,7 @@ fun ScheduleAlarmScreen(
                             onClick = {
                                 val c = selectedTime
                                 TimePickerDialog(context, { _, hour, minute ->
+                                    hasSelectedTime = true
                                     selectedTime = (selectedTime.clone() as Calendar).apply {
                                         set(Calendar.HOUR_OF_DAY, hour); set(Calendar.MINUTE, minute)
                                     }
@@ -231,6 +256,12 @@ fun ScheduleAlarmScreen(
                             "Current time: ${JavaDateFormat.getTimeInstance(JavaDateFormat.SHORT).format(Date(currentTimeMillis))}",
                             color = ScheduleMuted,
                             fontSize = 13.sp,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Date defaults to today and time to at least two minutes ahead. Change either if you prefer.",
+                            color = ScheduleMuted,
+                            fontSize = 12.sp,
                         )
                         Spacer(Modifier.height(4.dp))
                         Text("Time zone: ${TimeZone.getDefault().id}", color = ScheduleMuted, fontSize = 12.sp)
@@ -250,12 +281,7 @@ fun ScheduleAlarmScreen(
                 }
                 Spacer(Modifier.height(18.dp))
                 val scheduledAtMillis = remember(selectedDate, selectedTime) {
-                    (selectedDate.clone() as Calendar).apply {
-                        set(Calendar.HOUR_OF_DAY, selectedTime.get(Calendar.HOUR_OF_DAY))
-                        set(Calendar.MINUTE, selectedTime.get(Calendar.MINUTE))
-                        set(Calendar.SECOND, 0)
-                        set(Calendar.MILLISECOND, 0)
-                    }.timeInMillis
+                    scheduledAlarmTimeMillis(selectedDate, selectedTime)
                 }
                 QalbiRomanticButton(
                     text = if (state.isCreating) "Scheduling…" else "Schedule Wake-Up ❤️",
