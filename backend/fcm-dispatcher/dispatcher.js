@@ -326,9 +326,13 @@ startListener();
 // lets the dispatcher run as a web service while the Firestore listener stays
 // active in the same process. It does not participate in alarm dispatching.
 const healthServer = http.createServer((req, res) => {
-    if (req.method === 'GET' && req.url === '/health') {
+    const requestPath = (req.url || '/').split('?')[0].replace(/\/+$/, '') || '/';
+    const isHealthCheck = requestPath === '/health' &&
+        (req.method === 'GET' || req.method === 'HEAD');
+
+    if (isHealthCheck) {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('QALBI dispatcher is running\n');
+        res.end(req.method === 'HEAD' ? undefined : 'QALBI dispatcher is running\n');
         return;
     }
 

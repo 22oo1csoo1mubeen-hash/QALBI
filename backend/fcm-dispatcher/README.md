@@ -22,7 +22,7 @@ Create a Web Service from the project repository with:
 - Start command: npm start
 - Instance type: Free (best-effort only)
 
-Add the Firebase service-account JSON in Render as a Secret File named serviceAccountKey.json. Set GOOGLE_APPLICATION_CREDENTIALS to /etc/secrets/serviceAccountKey.json. Render sets PORT automatically; the service exposes GET /health for health checks.
+Add the Firebase service-account JSON in Render as a Secret File named serviceAccountKey.json. Set GOOGLE_APPLICATION_CREDENTIALS to /etc/secrets/serviceAccountKey.json. Render sets PORT automatically; the service exposes GET and HEAD /health for health checks.
 
 A free external uptime monitor that requests /health every five minutes can reduce idle spin-down. Render may still restart or suspend free services, and free hours are shared across the workspace. This does not provide guaranteed alarm delivery.
 
