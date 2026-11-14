@@ -9,9 +9,13 @@
  * Security: Private service-account credentials NEVER enter the Android client.
  */
 
+require('dotenv').config();
+
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 const admin = require('firebase-admin');
+const { timestampToMillis, remainingTtlMillis } = require('./dispatch-policy');
 
 // 1. Initialize Firebase Admin SDK
 const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS ||
@@ -49,6 +53,9 @@ if (fs.existsSync(serviceAccountPath)) {
 const db = admin.firestore();
 const messaging = admin.messaging();
 const dispatchedRequests = new Set();
+const retryAttempts = new Map();
+const MAX_RETRIES = 5;
+const MAX_REQUEST_TTL_MS = 15 * 60 * 1000;
 
 /**
  * Masks an FCM registration token for safe logging without exposing full routing secrets.
@@ -65,11 +72,33 @@ async function processWakeUpRequest(doc) {
     const data = doc.data();
     const requestId = doc.id;
 
-    if (dispatchedRequests.has(requestId) || data.fcmDispatched === true) {
+    if (dispatchedRequests.has(requestId) || data.fcmDispatched === true || data.fcmRetryExhausted === true) {
         return;
     }
 
     if (data.status !== 'PENDING') {
+        return;
+    }
+
+    const expiresAt = timestampToMillis(data.expiresAt);
+    const now = Date.now();
+    if (!Number.isFinite(expiresAt) || expiresAt <= now) {
+        await doc.ref.update({
+            fcmDispatchState: 'SKIPPED_EXPIRED',
+            fcmRetryExhausted: true,
+            fcmAttemptedAt: admin.firestore.FieldValue.serverTimestamp()
+        }).catch(() => {});
+        dispatchedRequests.delete(requestId);
+        return;
+    }
+    if (expiresAt - now > MAX_REQUEST_TTL_MS) {
+        await doc.ref.update({
+            fcmDispatchState: 'REJECTED_INVALID_EXPIRY',
+            fcmRetryExhausted: true,
+            fcmAttemptedAt: admin.firestore.FieldValue.serverTimestamp()
+        }).catch(() => {});
+        dispatchedRequests.add(requestId);
+        console.warn(`[QALBI] Request ${requestId} expiry exceeds the allowed wake-up lifetime.`);
         return;
     }
 
@@ -80,6 +109,32 @@ async function processWakeUpRequest(doc) {
 
     if (!receiverUid) {
         console.warn(`[QALBI] Request ${requestId} missing receiverUid. Skipping.`);
+        dispatchedRequests.delete(requestId);
+        return;
+    }
+
+    let authorization;
+    try {
+        authorization = await authorizeRequest(data);
+    } catch (err) {
+        dispatchedRequests.add(requestId);
+        console.error(`[QALBI] Authorization check failed for request ${requestId}:`, err.message);
+        await doc.ref.update({
+            fcmDispatchState: 'FAILED',
+            fcmErrorCode: String(err.code || 'authorization_check_failed').slice(0, 120),
+            fcmAttemptedAt: admin.firestore.FieldValue.serverTimestamp()
+        }).catch(() => {});
+        scheduleRetry(doc);
+        return;
+    }
+    if (!authorization.allowed) {
+        console.warn(`[QALBI] Request ${requestId} rejected before FCM dispatch: ${authorization.reason}`);
+        await doc.ref.update({
+            fcmDispatchState: 'REJECTED_UNAUTHORIZED',
+            fcmAuthorizationResult: authorization.reason,
+            fcmAttemptedAt: admin.firestore.FieldValue.serverTimestamp()
+        }).catch(() => {});
+        dispatchedRequests.add(requestId);
         return;
     }
 
@@ -94,12 +149,14 @@ async function processWakeUpRequest(doc) {
             .get();
 
         if (tokensSnapshot.empty) {
-            console.log(`[QALBI] No FCM device tokens found for receiver ${receiverUid.substring(0, 8)}.`);
+            console.warn(`[QALBI] No FCM device tokens for request ${requestId}; a bounded retry is scheduled.`);
             await doc.ref.update({
                 fcmDeliveryAttempted: true,
                 fcmTokenFound: false,
+                fcmDispatchState: 'NO_TOKENS',
                 fcmAttemptedAt: admin.firestore.FieldValue.serverTimestamp()
             });
+            scheduleRetry(doc);
             return;
         }
 
@@ -114,13 +171,21 @@ async function processWakeUpRequest(doc) {
         });
 
         if (deviceTokens.length === 0) {
-            console.log(`[QALBI] No valid tokens extracted for receiver ${receiverUid.substring(0, 8)}.`);
+            await doc.ref.update({
+                fcmDeliveryAttempted: true,
+                fcmTokenFound: false,
+                fcmDispatchState: 'NO_TOKENS',
+                fcmAttemptedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            scheduleRetry(doc);
             return;
         }
 
         console.log(`[QALBI] Dispatching to ${deviceTokens.length} device(s)...`);
 
-        // Construct high-priority FCM message payload
+        // Data-only is intentional: Android must invoke QalbiMessagingService so it can
+        // validate expiry and start the alarm foreground service. Notification payloads
+        // may be displayed by the OS without invoking onMessageReceived in background.
         const multicastMessage = {
             tokens: deviceTokens,
             data: {
@@ -130,27 +195,20 @@ async function processWakeUpRequest(doc) {
                 senderUsername: senderUsername,
                 receiverUid: receiverUid,
                 type: 'WAKE_UP_REQUEST',
-                createdAt: data.createdAt ? data.createdAt.toString() : Date.now().toString()
+                createdAt: String(timestampToMillis(data.createdAt) || now),
+                expiresAt: String(expiresAt)
             },
             android: {
                 priority: 'high',
-                notification: {
-                    channelId: 'qalbi_wake_up_channel',
-                    title: `☀️ Wake Up from ${senderDisplayName}`,
-                    body: `@${senderUsername} wants to wake you up! Tap to respond.`,
-                    priority: 'max',
-                    defaultSound: true,
-                    defaultVibrateTimings: true,
-                    visibility: 'public'
-                }
+                ttl: remainingTtlMillis(expiresAt, now)
             }
         };
 
         const response = await messaging.sendEachForMulticast(multicastMessage);
-        console.log(`[QALBI] FCM result for ${requestId}: ${response.successCount} sent, ${response.failureCount} failed.`);
+        console.log(`[QALBI] FCM accepted ${response.successCount} device send(s) for request ${requestId}; ${response.failureCount} failed. Acceptance is not device delivery.`);
 
         // Clean up stale or unregistered tokens
-        response.responses.forEach(async (resp, idx) => {
+        await Promise.all(response.responses.map(async (resp, idx) => {
             if (!resp.success && resp.error) {
                 const errorCode = resp.error.code;
                 console.warn(`[QALBI] Token ${maskToken(deviceTokens[idx])} error: ${errorCode}`);
@@ -166,20 +224,78 @@ async function processWakeUpRequest(doc) {
                     }
                 }
             }
-        });
+        }));
 
-        // Mark request as dispatched in Firestore
+        const accepted = response.successCount > 0;
+        const retryableFailure = !accepted;
         await doc.ref.update({
-            fcmDispatched: true,
-            fcmSuccessCount: response.successCount,
+            fcmDispatched: accepted,
+            fcmDispatchState: accepted ? 'ACCEPTED_BY_FCM' : 'FAILED',
+            fcmAcceptedCount: response.successCount,
             fcmFailureCount: response.failureCount,
-            fcmDispatchedAt: admin.firestore.FieldValue.serverTimestamp()
+            fcmAcceptedMessageIds: response.responses.filter(resp => resp.success).map(resp => resp.messageId).filter(Boolean),
+            fcmErrorCodes: response.responses.filter(resp => !resp.success && resp.error).map(resp => resp.error.code),
+            fcmAttemptedAt: admin.firestore.FieldValue.serverTimestamp()
         });
+        if (retryableFailure) scheduleRetry(doc);
+        else {
+            retryAttempts.delete(requestId);
+            dispatchedRequests.delete(requestId);
+        }
 
     } catch (err) {
         console.error(`[QALBI] Error dispatching push for ${requestId}:`, err.message);
-        dispatchedRequests.delete(requestId);
+        await doc.ref.update({
+            fcmDispatchState: 'FAILED',
+            fcmErrorCode: String(err.code || 'unknown').slice(0, 120),
+            fcmAttemptedAt: admin.firestore.FieldValue.serverTimestamp()
+        }).catch(() => {});
+        scheduleRetry(doc);
     }
+}
+
+async function authorizeRequest(data) {
+    if (!data.senderUid || !data.receiverUid || !data.connectionId || data.senderUid === data.receiverUid) {
+        return { allowed: false, reason: 'invalid_participants' };
+    }
+    const connectionRef = db.collection('connections').doc(data.connectionId);
+    const connection = await connectionRef.get();
+    const members = connection.exists ? connection.get('memberUids') : null;
+    if (!connection.exists || connection.get('status') !== 'CONNECTED' ||
+        !Array.isArray(members) || members.length !== 2 ||
+        !members.includes(data.senderUid) || !members.includes(data.receiverUid)) {
+        return { allowed: false, reason: 'connection_not_active' };
+    }
+    const [senderBlock, receiverBlock] = await Promise.all([
+        db.collection('userBlocks').doc(data.senderUid).collection('blockedUsers').doc(data.receiverUid).get(),
+        db.collection('userBlocks').doc(data.receiverUid).collection('blockedUsers').doc(data.senderUid).get()
+    ]);
+    if (senderBlock.exists || receiverBlock.exists) return { allowed: false, reason: 'participant_blocked' };
+    return { allowed: true, reason: 'authorized_connection' };
+}
+
+async function scheduleRetry(doc) {
+    const requestId = doc.id;
+    const attempt = (retryAttempts.get(requestId) || 0) + 1;
+    if (attempt > MAX_RETRIES) {
+        retryAttempts.delete(requestId);
+        dispatchedRequests.delete(requestId);
+        await doc.ref.update({ fcmRetryExhausted: true, fcmDispatchState: 'RETRY_EXHAUSTED' }).catch(() => {});
+        console.warn(`[QALBI] Retry limit reached for request ${requestId}.`);
+        return;
+    }
+    retryAttempts.set(requestId, attempt);
+    const delayMs = Math.min(15_000 * (2 ** (attempt - 1)), 4 * 60_000);
+    setTimeout(async () => {
+        dispatchedRequests.delete(requestId);
+        try {
+            const fresh = await doc.ref.get();
+            if (fresh.exists) await processWakeUpRequest(fresh);
+        } catch (err) {
+            console.error(`[QALBI] Retry check failed for request ${requestId}:`, err.message);
+            scheduleRetry(doc);
+        }
+    }, delayMs).unref?.();
 }
 
 /**
@@ -205,3 +321,22 @@ function startListener() {
 }
 
 startListener();
+
+// Render's free tier only offers web services. This lightweight health endpoint
+// lets the dispatcher run as a web service while the Firestore listener stays
+// active in the same process. It does not participate in alarm dispatching.
+const healthServer = http.createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('QALBI dispatcher is running\n');
+        return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Not found\n');
+});
+
+const port = Number(process.env.PORT || 3000);
+healthServer.listen(port, '0.0.0.0', () => {
+    console.log(`[QALBI FCM Dispatcher] Health endpoint listening on port ${port}.`);
+});

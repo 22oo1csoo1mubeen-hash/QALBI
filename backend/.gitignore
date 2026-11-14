@@ -1,0 +1,12 @@
+﻿# Node dependencies, logs, and local environment
+**/node_modules/
+*.log
+npm-debug.log*
+**/.env
+**/.env.*
+!**/.env.example
+
+# Firebase Admin private credentials
+**/serviceAccountKey.json
+*.pem
+*.key

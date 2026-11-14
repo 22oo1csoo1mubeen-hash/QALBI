@@ -1,0 +1,33 @@
+﻿# Android and Gradle outputs
+.gradle/
+.gradle-cache/
+**/build/
+local.properties
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+*.iml
+.idea/
+.externalNativeBuild/
+.cxx/
+captures/
+*.hprof
+
+# Signing credentials and local Firebase configuration
+*.jks
+*.keystore
+*.key
+*.p12
+*.pem
+secrets.properties
+google-services.json
+
+# IDE and OS files
+.vscode/
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+

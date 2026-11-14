@@ -1,0 +1,232 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ────────────────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ─── User Profile Documents: /users/{userId} ─────────────────────────────
+    match /users/{userId} {
+      // User documents include private account metadata and are owner-readable only.
+      allow get: if isOwner(userId);
+      allow list: if false;
+
+      // Create: user must be authenticated, creating their own UID, with no passwords/tokens
+      allow create: if isOwner(userId)
+                    && request.resource.data.uid == userId
+                    && request.resource.data.username is string
+                    && request.resource.data.username.size() >= 3
+                    && request.resource.data.username.size() <= 20
+                    && !('password' in request.resource.data)
+                    && !('passwordHash' in request.resource.data)
+                    && !('token' in request.resource.data);
+
+      // Update: owner only; UID and createdAt cannot be modified; credentials forbidden
+      allow update: if (isOwner(userId)
+                    && request.resource.data.uid == userId
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && !('password' in request.resource.data)
+                    && !('passwordHash' in request.resource.data))
+                    || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['passwordResetCode', 'passwordResetExpiresAt']);
+
+      // Delete: owner only
+      allow delete: if isOwner(userId);
+
+      // FCM Device Tokens: /users/{userId}/fcmTokens/{tokenId}
+      match /fcmTokens/{tokenId} {
+        // Only the authenticated device owner can register or remove their tokens
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // ─── Username Registry: /usernames/{usernameNormalized} ──────────────────
+    match /usernames/{username} {
+      // Public read allows pre-registration availability check and pre-login username-to-email resolution
+      allow read: if true;
+
+      // Create: claim allowed ONLY if document does NOT exist and UID matches authenticated user
+      allow create: if isAuthenticated()
+                    && request.resource.data.uid == request.auth.uid
+                    && username.size() >= 3
+                    && username.size() <= 20
+                    && !exists(/databases/$(database)/documents/usernames/$(username));
+
+      // Allow backfilling registered email during username resolution, or owner updates
+      allow update: if (isAuthenticated() && resource.data.uid == request.auth.uid)
+                    || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email']);
+
+      // Only the owning user can delete their claim
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    // ─── Minimal Public Profiles: /publicProfiles/{userId} ───────────────────
+    match /publicProfiles/{userId} {
+      // Any authenticated user can read public profile summaries for pairing display
+      allow read: if isAuthenticated();
+
+      // Only owner can create or update their public profile; no sensitive fields permitted
+      allow create, update: if isOwner(userId)
+                            && request.resource.data.uid == userId
+                            && request.resource.data.username is string
+                            && !('email' in request.resource.data)
+                            && !('password' in request.resource.data);
+
+      allow delete: if isOwner(userId);
+    }
+
+    // ─── Temporary Pairing Codes: /pairingCodes/{code} ───────────────────────
+    match /pairingCodes/{code} {
+      // Disallow list queries across entire collection to prevent code harvesting/enumeration
+      allow list: if false;
+
+      // Allow single document lookup by exact code so clients can verify and inspect codes
+      allow get: if true;
+
+      // Create: authenticated user creates code with own creatorUid and status ACTIVE
+      allow create: if isAuthenticated()
+                    && request.resource.data.creatorUid == request.auth.uid
+                    && request.resource.data.code == code
+                    && request.resource.data.status == "ACTIVE"
+                    && code.size() == 8;
+
+      // Update:
+      // Case 1: Creator revoking their active code
+      // Case 2: Another authenticated user (not the creator) redeeming an active code
+      allow update: if isAuthenticated() && (
+        (resource.data.creatorUid == request.auth.uid
+         && request.resource.data.status == "REVOKED"
+         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "revokedAt"]))
+        ||
+        (resource.data.status == "ACTIVE"
+         && resource.data.creatorUid != request.auth.uid
+         && request.resource.data.creatorUid == resource.data.creatorUid
+         && request.resource.data.code == resource.data.code
+         && request.resource.data.expiresAt == resource.data.expiresAt
+         && request.resource.data.status == "REDEEMED"
+         && request.resource.data.redeemedBy == request.auth.uid
+         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "redeemedBy", "redeemedAt"]))
+      );
+
+      // Delete: owner only
+      allow delete: if isAuthenticated() && resource.data.creatorUid == request.auth.uid;
+    }
+
+    // ─── Friend Connections: /connections/{connectionId} ─────────────────────
+    match /connections/{connectionId} {
+      // Only a member can read a connection; member-filtered queries remain supported.
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.memberUids;
+
+      // Create only as part of a real pairing-code redemption transaction.
+      allow create: if isAuthenticated()
+                    && request.auth.uid in request.resource.data.memberUids
+                    && request.resource.data.memberUids.size() == 2
+                    && request.resource.data.status == "CONNECTED"
+                    && request.resource.data.connectionId == connectionId
+                    && request.resource.data.createdFromPairingCode is string
+                    && exists(/databases/$(database)/documents/pairingCodes/$(request.resource.data.createdFromPairingCode))
+                    && get(/databases/$(database)/documents/pairingCodes/$(request.resource.data.createdFromPairingCode)).data.status == "ACTIVE"
+                    && get(/databases/$(database)/documents/pairingCodes/$(request.resource.data.createdFromPairingCode)).data.expiresAt > request.time
+                    && getAfter(/databases/$(database)/documents/pairingCodes/$(request.resource.data.createdFromPairingCode)).data.status == "REDEEMED"
+                    && getAfter(/databases/$(database)/documents/pairingCodes/$(request.resource.data.createdFromPairingCode)).data.redeemedBy == request.auth.uid
+                    && getAfter(/databases/$(database)/documents/pairingCodes/$(request.resource.data.createdFromPairingCode)).data.creatorUid in request.resource.data.memberUids
+                    && request.resource.data.memberUids.hasAll([
+                      getAfter(/databases/$(database)/documents/pairingCodes/$(request.resource.data.createdFromPairingCode)).data.creatorUid,
+                      request.auth.uid
+                    ])
+                    && (connectionId == getAfter(/databases/$(database)/documents/pairingCodes/$(request.resource.data.createdFromPairingCode)).data.creatorUid + "_" + request.auth.uid
+                        || connectionId == request.auth.uid + "_" + getAfter(/databases/$(database)/documents/pairingCodes/$(request.resource.data.createdFromPairingCode)).data.creatorUid)
+                    && !exists(/databases/$(database)/documents/userBlocks/$(request.auth.uid)/blockedUsers/$(getAfter(/databases/$(database)/documents/pairingCodes/$(request.resource.data.createdFromPairingCode)).data.creatorUid))
+                    && !exists(/databases/$(database)/documents/userBlocks/$(getAfter(/databases/$(database)/documents/pairingCodes/$(request.resource.data.createdFromPairingCode)).data.creatorUid)/blockedUsers/$(request.auth.uid));
+
+      // Disconnect: only connection members can delete the connection
+      allow delete: if isAuthenticated() && request.auth.uid in resource.data.memberUids;
+
+      // Connections cannot be updated arbitrarily
+      allow update: if false;
+    }
+
+    // ─── User Block List: /userBlocks/{blockerUid}/blockedUsers/{blockedUid} ─
+    match /userBlocks/{blockerUid}/blockedUsers/{blockedUid} {
+      // Both blocker and blocked user can verify block status during connection establishment
+      allow read: if isAuthenticated() && (request.auth.uid == blockerUid || request.auth.uid == blockedUid);
+      allow write: if isAuthenticated() && request.auth.uid == blockerUid;
+    }
+
+    // ─── Wake-Up Requests: /wakeUpRequests/{requestId} ──────────────────────
+    match /wakeUpRequests/{requestId} {
+      // Requests are visible only to their two participants. Sender/receiver queries must
+      // include the corresponding UID filter, as they do in the Android repository.
+      allow read: if isAuthenticated() && (
+        resource.data.senderUid == request.auth.uid ||
+        resource.data.receiverUid == request.auth.uid
+      );
+
+      // A request can be created only for an active mutual connection that is not blocked.
+      allow create: if isAuthenticated()
+                    && request.resource.data.senderUid == request.auth.uid
+                    && request.resource.data.receiverUid is string
+                    && request.resource.data.receiverUid != request.auth.uid
+                    && request.resource.data.requestId == requestId
+                    && request.resource.data.status == "PENDING"
+                    && request.resource.data.createdAt is timestamp
+                    && request.resource.data.expiresAt is timestamp
+                    && request.resource.data.expiresAt > request.time
+                    && request.resource.data.expiresAt <= request.time + duration.value(15, 'm')
+                    && request.resource.data.connectionId is string
+                    && exists(/databases/$(database)/documents/connections/$(request.resource.data.connectionId))
+                    && get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.status == "CONNECTED"
+                    && get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.memberUids.size() == 2
+                    && request.auth.uid in get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.memberUids
+                    && request.resource.data.receiverUid in get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.memberUids
+                    && !exists(/databases/$(database)/documents/userBlocks/$(request.auth.uid)/blockedUsers/$(request.resource.data.receiverUid))
+                    && !exists(/databases/$(database)/documents/userBlocks/$(request.resource.data.receiverUid)/blockedUsers/$(request.auth.uid));
+
+      // Only lifecycle fields may change, and each transition belongs to its participant.
+      allow update: if isAuthenticated()
+                    && request.resource.data.requestId == resource.data.requestId
+                    && request.resource.data.senderUid == resource.data.senderUid
+                    && request.resource.data.receiverUid == resource.data.receiverUid
+                    && request.resource.data.connectionId == resource.data.connectionId
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.expiresAt == resource.data.expiresAt
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                      "status", "acknowledgedAt", "declinedAt", "cancelledAt", "expiredAt", "updatedAt"
+                    ])
+                    && (
+                      (resource.data.status == "PENDING"
+                        && request.auth.uid == resource.data.receiverUid
+                        && request.resource.data.status == "ACKNOWLEDGED"
+                        && request.resource.data.acknowledgedAt != null)
+                      ||
+                      (resource.data.status == "PENDING"
+                        && request.auth.uid == resource.data.receiverUid
+                        && request.resource.data.status == "DECLINED"
+                        && request.resource.data.declinedAt != null)
+                      ||
+                      (resource.data.status == "PENDING"
+                        && request.auth.uid == resource.data.senderUid
+                        && request.resource.data.status == "CANCELLED"
+                        && request.resource.data.cancelledAt != null)
+                      ||
+                      (resource.data.status == "PENDING"
+                        && request.time >= resource.data.expiresAt
+                        && request.auth.uid in [resource.data.senderUid, resource.data.receiverUid]
+                        && request.resource.data.status == "EXPIRED")
+                    );
+
+      // Request records are not removed by client devices.
+      allow delete: if false;
+    }
+
+    // ─── Default Deny ────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

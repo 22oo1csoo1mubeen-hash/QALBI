@@ -5,7 +5,7 @@
   "main": "dispatcher.js",
   "scripts": {
     "start": "node dispatcher.js",
-    "test": "node -e \"console.log('FCM Dispatcher configured for QALBI')\""
+    "test": "node --test dispatch-policy.test.js"
   },
   "keywords": [
     "qalbi",
@@ -16,6 +16,7 @@
   "author": "QALBI Team",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^18.0.10",
     "firebase-admin": "^12.0.0"
   }
 }
