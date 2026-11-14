@@ -177,7 +177,9 @@ service cloud.firestore {
                     && request.resource.data.createdAt is timestamp
                     && request.resource.data.expiresAt is timestamp
                     && request.resource.data.expiresAt > request.time
-                    && request.resource.data.expiresAt <= request.time + duration.value(15, 'm')
+                    // The app sets the 15-minute expiry from the device clock. Allow
+                    // bounded clock skew between that device and Firestore server time.
+                    && request.resource.data.expiresAt <= request.time + duration.value(30, 'm')
                     && request.resource.data.connectionId is string
                     && exists(/databases/$(database)/documents/connections/$(request.resource.data.connectionId))
                     && get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.status == "CONNECTED"

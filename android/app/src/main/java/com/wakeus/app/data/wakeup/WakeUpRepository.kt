@@ -3,6 +3,7 @@ package com.wakeus.app.data.wakeup
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.wakeus.app.data.model.Connection
@@ -85,6 +86,7 @@ class WakeUpRepository(
             Connection.createDeterministicId(sender.id, receiver.id)
         }
 
+        var operation = "checking the friend connection"
         return try {
             // 2. Verify mutual active connection document
             val connDoc = firestore.collection("connections").document(connectionId).get().await()
@@ -93,6 +95,7 @@ class WakeUpRepository(
             }
 
             // 3. Verify block status
+            operation = "checking the block lists"
             val block1 = firestore.collection("userBlocks")
                 .document(sender.id)
                 .collection("blockedUsers")
@@ -109,6 +112,7 @@ class WakeUpRepository(
             }
 
             // 4. Duplicate request prevention: check for any active PENDING request to this receiver
+            operation = "checking for an existing request"
             val pendingQuery = firestore.collection("wakeUpRequests")
                 .whereEqualTo("senderUid", sender.id)
                 .whereEqualTo("receiverUid", receiver.id)
@@ -145,6 +149,7 @@ class WakeUpRepository(
                 updatedAt = now,
             )
 
+            operation = "creating the wake-up request"
             firestore.collection("wakeUpRequests")
                 .document(requestId)
                 .set(wakeUpRequest.toMap())
@@ -152,7 +157,11 @@ class WakeUpRepository(
 
             Result.success(wakeUpRequest)
         } catch (e: Exception) {
-            Result.failure(e)
+            if (e is FirebaseFirestoreException && e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                Result.failure(IllegalStateException("Firebase denied permission while $operation. Check that both phones are signed into the connected accounts and that the latest Firestore rules are deployed.", e))
+            } else {
+                Result.failure(e)
+            }
         }
     }
 
