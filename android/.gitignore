@@ -23,6 +23,8 @@ captures/
 *.pem
 secrets.properties
 google-services.json
+.env
+.env.*
 
 # IDE and OS files
 .vscode/
@@ -30,4 +32,5 @@ google-services.json
 Thumbs.db
 ehthumbs.db
 [Dd]esktop.ini
+
 

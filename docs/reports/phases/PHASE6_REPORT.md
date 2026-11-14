@@ -178,7 +178,7 @@ The user must physically test:
 3. Lock-screen wake display over keyguard.
 4. "I'm Awake!" silencing under physical touch.
 5. Background persistent notification behavior.
-Refer to [MANUAL_TESTING_GUIDE.md](file:///c:/QALBI/docs/guides/MANUAL_TESTING_GUIDE.md) for the 34 step-by-step test scenarios.
+Refer to [MANUAL_TESTING_GUIDE.md](../../guides/MANUAL_TESTING_GUIDE.md) for the 34 step-by-step test scenarios.
 
 ---
 
@@ -203,4 +203,5 @@ All repository-level implementation, security hardening, automated tests, APK co
 2. Install `app-debug.apk` on Device A and Device B.
 3. Complete `MANUAL_TESTING_GUIDE.md` test scenarios.
 4. Generate private release keystore following `RELEASE_CHECKLIST.md` and assemble `app-release.apk`.
+
 

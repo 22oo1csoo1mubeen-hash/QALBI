@@ -89,7 +89,7 @@ Key achievements:
 
 - **Code & Gradle Readiness**: 100% complete. All Firebase Auth and Firestore SDKs are compiled, configured, and tested.
 - **Conditional Google Services Plugin**: The build script checks `if (file("google-services.json").exists())`. When you place your `google-services.json` file into `c:\QALBI\app\`, the plugin automatically activates.
-- **Firestore Security Rules**: Prepared in [`firebase/firestore.rules`](file:///c:/QALBI/firebase/firestore.rules), ready for deployment.
+- **Firestore Security Rules**: Prepared in [`firebase/firestore.rules`](../../../firebase/firestore.rules), ready for deployment.
 - **Remaining External Actions**: Requires manual creation of a free Firebase project on the Firebase Console (detailed in Section G).
 
 ---
@@ -166,7 +166,7 @@ To connect your own free Firebase cloud backend to QALBI, follow these steps:
    - Start in **Production mode**.
 7. **Deploy Firestore Security Rules**:
    - Go to the **Rules** tab in Firestore Database.
-   - Copy the entire contents of [`firebase/firestore.rules`](file:///c:/QALBI/firebase/firestore.rules) from the project root and paste it into the editor.
+   - Copy the entire contents of [`firebase/firestore.rules`](../../../firebase/firestore.rules) from the project root and paste it into the editor.
    - Click **Publish**.
 8. **Rebuild the Application**:
    - In Android Studio or terminal, run:
@@ -230,4 +230,5 @@ git commit -m "feat: implement authentication and user profiles"
 - Real paired friend relationships stored securely in Firestore subcollections.
 - Real-time friends list observation using Firestore snapshots.
 - Friend removal and disconnection management.
+
 

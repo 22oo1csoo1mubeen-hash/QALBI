@@ -224,7 +224,7 @@ To deploy the updated security rules to your live Firebase project:
 1. Open your browser and go to the [Firebase Console](https://console.firebase.google.com/).
 2. Select your **QALBI** project (`qalbi-8414f`).
 3. In the left navigation, go to **Firestore Database** â†’ click the **Rules** tab at the top.
-4. Replace the existing rules with the contents of [`firebase/firestore.rules`](file:///c:/QALBI/firebase/firestore.rules).
+4. Replace the existing rules with the contents of [`firebase/firestore.rules`](../../../firebase/firestore.rules).
 5. Click the blue **Publish** button.
 
 *That's it! Once published, your Firebase database will securely enforce the Phase 3 pairing, connection, and block policies.*
@@ -268,4 +268,5 @@ git commit -m "feat: implement friend pairing"
 - Firebase Cloud Messaging (FCM) integration.
 - Native Android foreground alarm engine and wake-lock management.
 - "Wake Up" remote delivery and "I'm Awake" reciprocal response.
+
 

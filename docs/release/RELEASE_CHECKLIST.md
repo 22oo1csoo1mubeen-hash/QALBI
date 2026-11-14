@@ -18,7 +18,7 @@
 
 - [ ] **â‚¹0 Budget Verification**: Project runs exclusively under Firebase Spark free tier; Blaze billing is NOT enabled.
 - [ ] **No Client Credential Exposure**: Neither `google-services.json`, Firebase service account private keys, nor signing passwords are committed to Git.
-- [ ] **Git Repository Hygiene**: Working tree is clean; `.gitignore` blocks `*.jks`, `*.keystore`, `*.key`, `*.p12`, `*.pem`, `serviceAccountKey.json`, and `secrets.properties`.
+- [ ] **Git Repository Hygiene**: Working tree is clean; Android and backend `.gitignore` files block signing keys, Firebase private credentials, local configuration, and generated outputs.
 - [ ] **Firestore Security Rules Published**: `firebase/firestore.rules` published in Firebase Console with:
   - `/users/{userId}`: Owner-only read and write (`isOwner(userId)`).
   - `/publicProfiles/{userId}`: Authenticated read; owner-only write with email/password forbidden.
@@ -34,8 +34,8 @@
 ## 3. Remote Push Notification Infrastructure
 
 - [ ] **FCM Device Registration**: FCM token repository registers device token under `/users/{uid}/fcmTokens/{tokenId}` upon login.
-- [ ] **Push Dispatcher Status**: Trusted zero-cost FCM dispatcher (`backend/fcm-dispatcher/dispatcher.js`) configured:
-  - Downloaded `serviceAccountKey.json` placed in `backend/fcm-dispatcher/` (local execution or free container).
+- [ ] **Push Dispatcher Status**: Trusted FCM dispatcher (`backend/fcm-dispatcher/dispatcher.js`) configured:
+  - Service-account key supplied privately to the host and verified NOT tracked in Git.
   - Service account key verified NOT tracked in Git.
   - Dispatcher listens in real-time to Firestore `/wakeUpRequests/` and dispatches high-priority pushes.
 
