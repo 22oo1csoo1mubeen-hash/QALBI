@@ -31,6 +31,7 @@ class WakeUpAlarmService : Service() {
         val requestId = intent.getStringExtra(NotificationHelper.EXTRA_REQUEST_ID) ?: ""
         val senderDisplayName = intent.getStringExtra("senderDisplayName") ?: "Your Friend"
         val senderUsername = intent.getStringExtra("senderUsername") ?: "friend"
+        val customMessage = intent.getStringExtra("customMessage")?.take(160).orEmpty()
 
         Log.d(TAG, "onStartCommand action=$action for requestId=$requestId")
 
@@ -42,7 +43,8 @@ class WakeUpAlarmService : Service() {
                         context = applicationContext,
                         requestId = requestId,
                         senderDisplayName = senderDisplayName,
-                        senderUsername = senderUsername
+                        senderUsername = senderUsername,
+                        customMessage = customMessage,
                     )
                     startForeground(NOTIFICATION_ID, notification)
                     AlarmDiagnostics.record(applicationContext, AlarmDiagnosticEvent.ALARM_SERVICE_STARTED, requestId)

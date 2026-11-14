@@ -61,7 +61,7 @@ This is best-effort scheduling, not a delivery SLA. Cron runs at minute granular
 
 4. On two connected accounts, schedule an alarm two minutes ahead. Close QALBI and turn off or disconnect the sender phone; keep the recipient phone on, online, and permitted to show notifications. Verify the recipient alarm, the schedule status, then repeat with a schedule cancelled before its due time.
 
-Changing a schedule is handled by cancelling it and creating another. A schedule in `PROCESSING` can no longer be cancelled because execution has already claimed it. `SENT` means FCM accepted at least one device send; it does not confirm the recipient heard the alarm.
+When delivery is accepted, the worker notifies the sender and leaves the schedule in `SENT` while it waits for a response. The sender's app opens the same waiting-for-response screen used by immediate wake-up requests. On acknowledgement, decline, cancellation, or the 15-minute timeout, the worker finalizes the schedule; the Android pending list hides completed schedules. Pending schedules can be edited in place while their status is `SCHEDULED`; a schedule in `PROCESSING` has already been claimed and cannot be edited or cancelled. `SENT` means FCM accepted at least one device send; it does not confirm the recipient heard the alarm.
 
 ## Local checks
 

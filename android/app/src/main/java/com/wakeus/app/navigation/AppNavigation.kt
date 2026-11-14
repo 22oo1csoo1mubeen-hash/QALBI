@@ -1,16 +1,28 @@
 package com.wakeus.app.navigation
 
+import android.animation.ValueAnimator
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -23,12 +35,16 @@ import com.wakeus.app.ui.auth.LoginScreen
 import com.wakeus.app.ui.auth.RegisterScreen
 import com.wakeus.app.ui.components.QalbiBottomNavigationBar
 import com.wakeus.app.ui.components.QalbiNavTab
+import com.wakeus.app.ui.components.LocalFallingPetalClock
+import com.wakeus.app.ui.components.FallingPetalsOverlay
 import com.wakeus.app.ui.friends.ConnectFriendScreen
 import com.wakeus.app.ui.friends.ConnectedFriendsScreen
 import com.wakeus.app.ui.friends.FriendDetailScreen
 import com.wakeus.app.ui.home.HomeScreen
 import com.wakeus.app.ui.profile.ProfileScreen
 import com.wakeus.app.ui.secret.SecretRomanticScreen
+import com.wakeus.app.ui.secret.BabyLoveLoadingScreen
+import com.wakeus.app.ui.secret.BabyLoveScreen
 import com.wakeus.app.ui.settings.SettingsScreen
 import com.wakeus.app.ui.splash.SplashScreen
 import com.wakeus.app.ui.wakeup.IncomingRequestScreen
@@ -38,6 +54,10 @@ import com.wakeus.app.ui.wakeup.ScheduleAlarmScreen
 import com.wakeus.app.ui.wakeup.ScheduledAlarmsScreen
 import com.wakeus.app.ui.welcome.WelcomeScreen
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.flowOf
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 
 /**
  * Central navigation graph for the QALBI app.
@@ -48,6 +68,9 @@ import kotlinx.coroutines.launch
 fun AppNavigation(
     navController: NavHostController,
     initialRequestId: String? = null,
+    initialScheduledRequestId: String? = null,
+    initialScheduledFriendId: String? = null,
+    initialScheduledNavigationToken: Long = 0L,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val navigationScope = rememberCoroutineScope()
@@ -72,7 +95,8 @@ fun AppNavigation(
                 senderUid = req.senderUid,
                 senderDisplayName = req.senderDisplayName,
                 senderUsername = req.senderUsername,
-                expiresAt = req.expiresAt
+                expiresAt = req.expiresAt,
+                customMessage = req.customMessage,
             )
             navController.navigate(Screen.IncomingRequest.withId(req.requestId)) {
                 launchSingleTop = true
@@ -82,6 +106,87 @@ fun AppNavigation(
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val authState by QalbiRepository.authState.collectAsState()
+    val senderUid = (authState as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user?.id.orEmpty()
+    val scheduledOutgoingFlow = remember(senderUid) {
+        if (senderUid.isBlank()) flowOf(emptyList())
+        else QalbiRepository.wakeUpRepository.observeScheduledOutgoingRequests(senderUid)
+    }
+    val scheduledOutgoingRequests by scheduledOutgoingFlow.collectAsState(initial = emptyList())
+    val activeScheduledOutgoing = scheduledOutgoingRequests.firstOrNull {
+        it.status in setOf(
+            com.wakeus.app.data.model.WakeUpRequestStatus.PENDING,
+            com.wakeus.app.data.model.WakeUpRequestStatus.ACKNOWLEDGED,
+            com.wakeus.app.data.model.WakeUpRequestStatus.DECLINED,
+            com.wakeus.app.data.model.WakeUpRequestStatus.EXPIRED,
+        ) && it.createdAt >= System.currentTimeMillis() - 16 * 60 * 1000L &&
+            it.fcmDispatched && it.receiverUid.isNotBlank()
+    }
+    val displayedRequestId = navBackStackEntry?.arguments?.getString("requestId")
+    var handledScheduledNavigationToken by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(initialScheduledRequestId, initialScheduledFriendId, initialScheduledNavigationToken, currentRoute, authState) {
+        if (handledScheduledNavigationToken != initialScheduledNavigationToken &&
+            !initialScheduledRequestId.isNullOrBlank() && !initialScheduledFriendId.isNullOrBlank() &&
+            authState is com.wakeus.app.data.auth.AuthState.Authenticated &&
+            currentRoute != Screen.Splash.route
+        ) {
+            handledScheduledNavigationToken = initialScheduledNavigationToken
+            navController.navigate(Screen.WakeUp.withRequest(initialScheduledFriendId, initialScheduledRequestId)) {
+                launchSingleTop = true
+            }
+        }
+    }
+
+    LaunchedEffect(activeScheduledOutgoing?.requestId) {
+        val request = activeScheduledOutgoing ?: return@LaunchedEffect
+        if (displayedRequestId != request.requestId) {
+            navController.navigate(Screen.WakeUp.withRequest(request.receiverUid, request.requestId)) {
+                launchSingleTop = true
+            }
+        }
+    }
+
+    val petalFrameNanos = remember { mutableLongStateOf(0L) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var animationsEnabled by remember { mutableStateOf(ValueAnimator.areAnimatorsEnabled()) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                animationsEnabled = ValueAnimator.areAnimatorsEnabled()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val isPetalScreen = currentRoute in setOf(
+        Screen.Home.route,
+        Screen.BabyLove.route,
+        Screen.ConnectFriend.route,
+        Screen.ConnectedFriends.route,
+        Screen.FriendDetail.route,
+        Screen.WakeUp.route,
+        Screen.WakeUpTab.route,
+        Screen.ScheduleAlarm.route,
+        Screen.ScheduledAlarms.route,
+        Screen.IncomingRequest.route,
+        Screen.Profile.route,
+        Screen.Settings.route,
+    )
+    LaunchedEffect(isPetalScreen, animationsEnabled, lifecycleOwner) {
+        if (!isPetalScreen || !animationsEnabled) {
+            petalFrameNanos.longValue = 0L
+            return@LaunchedEffect
+        }
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            val elapsedBeforePause = petalFrameNanos.longValue
+            val segmentStart = withFrameNanos { it }
+            while (true) {
+                val frame = withFrameNanos { it }
+                petalFrameNanos.longValue = elapsedBeforePause + frame - segmentStart
+            }
+        }
+    }
 
     val friendsList by QalbiRepository.friends.collectAsState(initial = emptyList())
 
@@ -152,10 +257,11 @@ fun AppNavigation(
                 .fillMaxSize()
                 .padding(bottom = innerPadding.calculateBottomPadding())
         ) {
-            NavHost(
-                navController = navController,
-                startDestination = Screen.Splash.route,
-            ) {
+            CompositionLocalProvider(LocalFallingPetalClock provides petalFrameNanos) {
+                NavHost(
+                    navController = navController,
+                    startDestination = Screen.Splash.route,
+                ) {
 
                 composable(Screen.Splash.route) {
                     SplashScreen(
@@ -243,6 +349,11 @@ fun AppNavigation(
                         onOpenSecretRomantic = {
                             navController.navigate(Screen.SecretRomantic.route)
                         },
+                        onOpenBabyLove = {
+                            navController.navigate(Screen.BabyLoveLoading.route) {
+                                launchSingleTop = true
+                            }
+                        },
                     )
                 }
 
@@ -302,11 +413,20 @@ fun AppNavigation(
 
                 composable(
                     route = Screen.WakeUp.route,
-                    arguments = listOf(navArgument("friendId") { type = NavType.StringType }),
+                    arguments = listOf(
+                        navArgument("friendId") { type = NavType.StringType },
+                        navArgument("requestId") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        },
+                    ),
                 ) { backStackEntry ->
                     val friendId = backStackEntry.arguments?.getString("friendId") ?: ""
+                    val requestId = backStackEntry.arguments?.getString("requestId")
                     WakeUpScreen(
                         friendId = friendId,
+                        requestId = requestId,
                         onManageSchedules = { navController.navigate(Screen.ScheduledAlarms.route) },
                         onBack = {
                             if (!navController.popBackStack()) {
@@ -382,6 +502,45 @@ fun AppNavigation(
                         onBack = { navController.popBackStack() },
                     )
                 }
+
+                composable(
+                    route = Screen.BabyLoveLoading.route,
+                    enterTransition = { fadeIn(tween(400)) },
+                    exitTransition = { fadeOut(tween(400)) },
+                    popEnterTransition = { fadeIn(tween(300)) },
+                    popExitTransition = { fadeOut(tween(300)) },
+                ) {
+                    BabyLoveLoadingScreen(
+                        onComplete = {
+                            navController.navigate(Screen.BabyLove.route) {
+                                popUpTo(Screen.BabyLoveLoading.route) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        },
+                    )
+                }
+
+                composable(
+                    route = Screen.BabyLove.route,
+                    enterTransition = { fadeIn(tween(850)) },
+                    exitTransition = { fadeOut(tween(450)) },
+                    popEnterTransition = { fadeIn(tween(450)) },
+                    popExitTransition = { fadeOut(tween(450)) },
+                ) {
+                    BabyLoveScreen(
+                        onBack = {
+                            if (!navController.popBackStack(Screen.Home.route, inclusive = false)) {
+                                navController.navigate(Screen.Home.route) {
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+            if (isPetalScreen && currentRoute != Screen.BabyLove.route) {
+                FallingPetalsOverlay()
+            }
             }
         }
     }

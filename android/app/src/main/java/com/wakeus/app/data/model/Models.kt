@@ -354,6 +354,9 @@ data class WakeUpRequest(
     val expiredAt: Long? = null,
     val schemaVersion: Int = 1,
     val customMessage: String = "",
+    val scheduleId: String? = null,
+    val deliverySource: String? = null,
+    val fcmDispatched: Boolean = false,
 ) {
     val isPending: Boolean get() = status == WakeUpRequestStatus.PENDING && !isExpired
     val isExpired: Boolean get() = System.currentTimeMillis() >= expiresAt || status == WakeUpRequestStatus.EXPIRED
@@ -421,6 +424,9 @@ data class WakeUpRequest(
             val expiredAt = (data["expiredAt"] as? com.google.firebase.Timestamp)?.toDate()?.time
             val schemaVersion = (data["schemaVersion"] as? Number)?.toInt() ?: 1
             val customMessage = data["customMessage"] as? String ?: ""
+            val scheduleId = data["scheduleId"] as? String
+            val deliverySource = data["deliverySource"] as? String
+            val fcmDispatched = data["fcmDispatched"] as? Boolean ?: false
 
             val effectiveStatus = if (status == WakeUpRequestStatus.PENDING && System.currentTimeMillis() >= expiresAt) {
                 WakeUpRequestStatus.EXPIRED
@@ -445,6 +451,9 @@ data class WakeUpRequest(
                 expiredAt = expiredAt,
                 schemaVersion = schemaVersion,
                 customMessage = customMessage,
+                scheduleId = scheduleId,
+                deliverySource = deliverySource,
+                fcmDispatched = fcmDispatched,
             )
         }
     }

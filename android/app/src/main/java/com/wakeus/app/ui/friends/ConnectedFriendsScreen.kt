@@ -1,6 +1,9 @@
 package com.wakeus.app.ui.friends
 
 import android.app.Activity
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import android.text.format.DateFormat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -25,17 +28,28 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +57,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -52,10 +67,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.delay
 import com.wakeus.app.R
 import com.wakeus.app.data.model.AvatarPreset
 import com.wakeus.app.data.model.Friend
+import com.wakeus.app.data.model.ScheduledAlarm
+import com.wakeus.app.data.model.ScheduledAlarmStatus
+import com.wakeus.app.viewmodel.ScheduledAlarmsViewModel
 import com.wakeus.app.viewmodel.FriendsViewModel
+import java.text.DateFormat as JavaDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.TimeZone
 
 private val ScreenBgFallback = Color(0xFFFBF6F3)
 private val DeepWine = Color(0xFF80243C)
@@ -72,6 +95,103 @@ fun ConnectedFriendsScreen(
     viewModel: FriendsViewModel = viewModel(),
 ) {
     val friends by viewModel.friends.collectAsState()
+    val schedulesViewModel: ScheduledAlarmsViewModel = viewModel()
+    val schedulesState by schedulesViewModel.uiState.collectAsState()
+    var scheduleClockMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            scheduleClockMillis = System.currentTimeMillis()
+        }
+    }
+    val upcomingSchedules = schedulesState.schedules.filter { it.isActiveAt(scheduleClockMillis) }
+    val context = LocalContext.current
+    var editingSchedule by remember { mutableStateOf<ScheduledAlarm?>(null) }
+    var cancellingSchedule by remember { mutableStateOf<ScheduledAlarm?>(null) }
+    var editDate by remember { mutableStateOf(Calendar.getInstance()) }
+    var editTime by remember { mutableStateOf(Calendar.getInstance()) }
+    var editMessage by remember { mutableStateOf("") }
+
+    editingSchedule?.let { schedule ->
+        AlertDialog(
+            onDismissRequest = { if (schedulesState.editingId == null) editingSchedule = null },
+            containerColor = CardBg,
+            title = { Text("Edit alarm for ${schedule.receiverDisplayName}", color = DarkWineText) },
+            text = {
+                Column {
+                    TextButton(onClick = {
+                        val current = editDate.clone() as Calendar
+                        DatePickerDialog(context, { _, year, month, day ->
+                            editDate = (editDate.clone() as Calendar).apply {
+                                set(Calendar.YEAR, year); set(Calendar.MONTH, month); set(Calendar.DAY_OF_MONTH, day)
+                            }
+                        }, current.get(Calendar.YEAR), current.get(Calendar.MONTH), current.get(Calendar.DAY_OF_MONTH)).apply {
+                            datePicker.minDate = System.currentTimeMillis()
+                            show()
+                        }
+                    }) {
+                        Text("Date: ${JavaDateFormat.getDateInstance(JavaDateFormat.FULL).format(editDate.time)}", color = DeepWine)
+                    }
+                    TextButton(onClick = {
+                        val current = editTime
+                        TimePickerDialog(context, { _, hour, minute ->
+                            editTime = (editTime.clone() as Calendar).apply {
+                                set(Calendar.HOUR_OF_DAY, hour); set(Calendar.MINUTE, minute)
+                            }
+                        }, current.get(Calendar.HOUR_OF_DAY), current.get(Calendar.MINUTE), DateFormat.is24HourFormat(context)).show()
+                    }) {
+                        Text("Time: ${JavaDateFormat.getTimeInstance(JavaDateFormat.SHORT).format(editTime.time)}", color = DeepWine)
+                    }
+                    OutlinedTextField(
+                        value = editMessage,
+                        onValueChange = { if (it.length <= 160) editMessage = it },
+                        label = { Text("Message (optional)") },
+                        supportingText = { Text("${editMessage.length}/160") },
+                        minLines = 2,
+                        maxLines = 4,
+                    )
+                    if (schedulesState.editingId == schedule.scheduleId) {
+                        Text("Saving changes…", color = MutedWineText, modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = schedulesState.editingId == null,
+                    onClick = {
+                        val scheduledAt = (editDate.clone() as Calendar).apply {
+                            set(Calendar.HOUR_OF_DAY, editTime.get(Calendar.HOUR_OF_DAY))
+                            set(Calendar.MINUTE, editTime.get(Calendar.MINUTE))
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }.timeInMillis
+                        schedulesViewModel.edit(schedule, scheduledAt, schedule.timeZoneId, editMessage)
+                        editingSchedule = null
+                    },
+                ) { Text("Save changes", color = DeepWine) }
+            },
+            dismissButton = {
+                TextButton(enabled = schedulesState.editingId == null, onClick = { editingSchedule = null }) {
+                    Text("Close", color = MutedWineText)
+                }
+            },
+        )
+    }
+    cancellingSchedule?.let { schedule ->
+        AlertDialog(
+            onDismissRequest = { cancellingSchedule = null },
+            containerColor = CardBg,
+            title = { Text("Cancel scheduled alarm?", color = DarkWineText) },
+            text = { Text("${schedule.receiverDisplayName} will no longer receive this alarm.", color = MutedWineText) },
+            confirmButton = {
+                TextButton(onClick = {
+                    schedulesViewModel.cancel(schedule)
+                    cancellingSchedule = null
+                }) { Text("Cancel alarm", color = DeepWine) }
+            },
+            dismissButton = { TextButton(onClick = { cancellingSchedule = null }) { Text("Keep it", color = MutedWineText) } },
+        )
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -245,7 +365,114 @@ fun ConnectedFriendsScreen(
                     }
                 }
 
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    text = "Scheduled Alarms",
+                    fontFamily = FontFamily.Serif,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 19.sp,
+                    color = DeepWine,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+                )
+                Text(
+                    text = "Your upcoming wake-up calls for all connected friends",
+                    fontSize = 13.sp,
+                    color = MutedWineText,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                )
+                if (schedulesState.isLoading) {
+                    Text("Loading scheduled alarms…", color = MutedWineText, modifier = Modifier.padding(12.dp))
+                } else if (upcomingSchedules.isEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = CardBg),
+                        border = BorderStroke(1.dp, CardBorderColor),
+                    ) {
+                        Text(
+                            "No scheduled alarms yet. Open a friend's profile to schedule one.",
+                            color = MutedWineText,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(18.dp),
+                        )
+                    }
+                } else {
+                    upcomingSchedules.forEach { schedule ->
+                        FriendScheduledAlarmCard(
+                            schedule = schedule,
+                            isEditing = schedulesState.editingId == schedule.scheduleId,
+                            onEdit = {
+                                val zone = runCatching { TimeZone.getTimeZone(schedule.timeZoneId) }
+                                    .getOrDefault(TimeZone.getDefault())
+                                editDate = Calendar.getInstance(zone).apply { timeInMillis = schedule.scheduledAtMillis }
+                                editTime = Calendar.getInstance(zone).apply { timeInMillis = schedule.scheduledAtMillis }
+                                editMessage = schedule.message
+                                editingSchedule = schedule
+                            },
+                            onCancel = { cancellingSchedule = schedule },
+                        )
+                        Spacer(Modifier.height(10.dp))
+                    }
+                }
+                schedulesState.error?.let { error ->
+                    Text(error, color = Color(0xFFB3261E), fontSize = 12.sp, modifier = Modifier.padding(6.dp))
+                }
+
                 Spacer(Modifier.height(32.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FriendScheduledAlarmCard(
+    schedule: ScheduledAlarm,
+    isEditing: Boolean,
+    onEdit: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        border = BorderStroke(1.dp, CardBorderColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Schedule, contentDescription = null, tint = DeepWine, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("For ${schedule.receiverDisplayName}", color = DarkWineText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("@${schedule.receiverUsername}", color = MutedWineText, fontSize = 12.sp)
+                }
+                Surface(shape = RoundedCornerShape(50), color = Color(0xFFFCEBEF)) {
+                    Text(
+                        schedule.status.name.lowercase().replaceFirstChar(Char::uppercase),
+                        color = DeepWine,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(schedule.formattedSchedule(), color = DarkWineText, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            if (schedule.message.isNotBlank()) {
+                Text(schedule.message, color = MutedWineText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+            }
+            if (schedule.status == ScheduledAlarmStatus.SCHEDULED && schedule.canBeCancelled) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onEdit, enabled = !isEditing) {
+                        Icon(Icons.Filled.Edit, contentDescription = null, tint = DeepWine, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (isEditing) "Saving…" else "Edit", color = DeepWine)
+                    }
+                    TextButton(onClick = onCancel, enabled = !isEditing) {
+                        Icon(Icons.Filled.DeleteOutline, contentDescription = null, tint = MutedWineText, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Cancel", color = MutedWineText)
+                    }
+                }
             }
         }
     }

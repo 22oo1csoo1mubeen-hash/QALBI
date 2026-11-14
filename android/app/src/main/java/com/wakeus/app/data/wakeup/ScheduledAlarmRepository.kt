@@ -3,6 +3,7 @@ package com.wakeus.app.data.wakeup
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.Timestamp
 import com.wakeus.app.data.model.Friend
@@ -88,18 +89,29 @@ class ScheduledAlarmRepository(
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp(),
                 "schemaVersion" to 1,
+                "senderNotificationSent" to false,
             )
             val scheduleRef = firestore.collection(COLLECTION).document(id)
-            val existing = scheduleRef.get().await()
-            if (existing.exists()) {
-                val sameRequest = existing.getString("senderUid") == uid &&
+            try {
+                // Write first: reading a fresh random document is denied by rules that only
+                // authorize reads of documents with an existing senderUid.
+                scheduleRef.set(scheduleData).await()
+            } catch (writeError: Exception) {
+                // A retry can arrive after Firestore committed the first write but before the
+                // client received its response. Updates are intentionally forbidden by rules;
+                // read back only after denial and accept only an exact match owned by this user.
+                if (writeError !is FirebaseFirestoreException ||
+                    writeError.code != FirebaseFirestoreException.Code.PERMISSION_DENIED
+                ) throw writeError
+
+                val existing = runCatching { scheduleRef.get().await() }.getOrNull()
+                val sameRequest = existing?.exists() == true &&
+                    existing.getString("senderUid") == uid &&
                     existing.getString("receiverUid") == friend.id &&
                     existing.getTimestamp("scheduledAt")?.toDate()?.time == scheduledAtMillis &&
                     existing.getString("timeZoneId") == timeZoneId &&
                     existing.getString("message").orEmpty() == normalizedMessage
-                if (!sameRequest) throw IllegalStateException("This schedule request ID is already in use.")
-            } else {
-                scheduleRef.set(scheduleData).await()
+                if (!sameRequest) throw writeError
             }
             id
         }
@@ -112,18 +124,96 @@ class ScheduledAlarmRepository(
             close()
             return@callbackFlow
         }
-        val listener: ListenerRegistration = firestore.collection(COLLECTION)
+        var latestSchedules: List<ScheduledAlarm>? = null
+        val completedScheduleIds = mutableSetOf<String>()
+        fun emitSchedules() {
+            val schedules = latestSchedules ?: return
+            trySend(schedules.filterNot { it.scheduleId in completedScheduleIds })
+        }
+
+        val scheduleListener: ListenerRegistration = firestore.collection(COLLECTION)
             .whereEqualTo("senderUid", senderUid)
             .addSnapshotListener { snapshot, error ->
-                if (error != null || snapshot == null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                val schedules = snapshot.documents.mapNotNull(ScheduledAlarm::fromDocument)
+                if (error != null || snapshot == null) return@addSnapshotListener
+                latestSchedules = snapshot.documents.mapNotNull(ScheduledAlarm::fromDocument)
                     .sortedBy(ScheduledAlarm::scheduledAtMillis)
-                trySend(schedules)
+                emitSchedules()
             }
-        awaitClose { listener.remove() }
+
+        // A request can finish before the dispatcher updates its parent schedule.
+        // Observe participant-owned requests too, so completed scheduled alarms
+        // disappear immediately after an ACK/decline/cancel/expiry transition.
+        val requestListener: ListenerRegistration = firestore.collection("wakeUpRequests")
+            .whereEqualTo("senderUid", senderUid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) return@addSnapshotListener
+                val terminalStatuses = setOf("ACKNOWLEDGED", "DECLINED", "CANCELLED", "EXPIRED")
+                completedScheduleIds.clear()
+                snapshot.documents.forEach { request ->
+                    if (request.getString("deliverySource") == "CLOUDFLARE_SCHEDULED_ALARM" &&
+                        request.getString("status") in terminalStatuses
+                    ) {
+                        request.getString("scheduleId")?.let(completedScheduleIds::add)
+                    }
+                }
+                emitSchedules()
+            }
+
+        awaitClose {
+            scheduleListener.remove()
+            requestListener.remove()
+        }
+    }
+
+    suspend fun edit(
+        schedule: ScheduledAlarm,
+        scheduledAtMillis: Long,
+        timeZoneId: String,
+        message: String,
+    ): Result<Unit> {
+        val firestore = firestoreProvider() ?: return Result.failure(FirebaseNotConfiguredException())
+        val uid = authProvider()?.currentUser?.uid
+            ?: return Result.failure(IllegalStateException("Sign in before editing a schedule."))
+        if (schedule.senderUid != uid || schedule.status != ScheduledAlarmStatus.SCHEDULED) {
+            return Result.failure(IllegalStateException("This alarm is no longer editable."))
+        }
+        val now = System.currentTimeMillis()
+        if (scheduledAtMillis <= now) {
+            return Result.failure(IllegalArgumentException("Choose a date and time in the future."))
+        }
+        if (scheduledAtMillis > now + MAX_SCHEDULE_AHEAD_MS) {
+            return Result.failure(IllegalArgumentException("Schedules can be set up to one year ahead."))
+        }
+        val normalizedMessage = message.trim()
+        if (normalizedMessage.length > MAX_MESSAGE_LENGTH) {
+            return Result.failure(IllegalArgumentException("Keep your message under 160 characters."))
+        }
+        if (runCatching { ZoneId.of(timeZoneId) }.isFailure) {
+            return Result.failure(IllegalArgumentException("The device timezone could not be read."))
+        }
+
+        return runCatching {
+            val ref = firestore.collection(COLLECTION).document(schedule.scheduleId)
+            firestore.runTransaction { transaction ->
+                val current = transaction.get(ref)
+                if (current.getString("senderUid") != uid ||
+                    current.getString("status") != ScheduledAlarmStatus.SCHEDULED.name
+                ) throw IllegalStateException("This alarm has already started and can no longer be edited.")
+
+                val scheduledAt = Timestamp(Date(scheduledAtMillis))
+                transaction.update(
+                    ref,
+                    mapOf(
+                        "scheduledAt" to scheduledAt,
+                        "nextAttemptAt" to scheduledAt,
+                        "timeZoneId" to timeZoneId,
+                        "message" to normalizedMessage,
+                        "updatedAt" to FieldValue.serverTimestamp(),
+                    ),
+                )
+                Unit
+            }.await()
+        }
     }
 
     suspend fun cancel(schedule: ScheduledAlarm): Result<Unit> {

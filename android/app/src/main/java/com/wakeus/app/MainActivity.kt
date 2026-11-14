@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
@@ -34,6 +35,9 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     private var pendingRequestId by mutableStateOf<String?>(null)
+    private var pendingScheduledRequestId by mutableStateOf<String?>(null)
+    private var pendingScheduledFriendId by mutableStateOf<String?>(null)
+    private var pendingScheduledNavigationToken by mutableLongStateOf(0L)
 
     private val requestNotificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
@@ -48,6 +52,9 @@ class MainActivity : ComponentActivity() {
         configureLockScreenPresentation()
         requestNotificationPermission()
         pendingRequestId = extractRequestId(intent)
+        pendingScheduledRequestId = intent.getStringExtra(NotificationHelper.EXTRA_SCHEDULED_REQUEST_ID)
+        pendingScheduledFriendId = intent.getStringExtra(NotificationHelper.EXTRA_FRIEND_ID)
+        if (!pendingScheduledRequestId.isNullOrBlank()) pendingScheduledNavigationToken = System.currentTimeMillis()
 
         // Sync the token when the authenticated session becomes available. Failed uploads
         // are retried by WorkManager and do not hold a permanent listener service open.
@@ -69,6 +76,9 @@ class MainActivity : ComponentActivity() {
                     AppNavigation(
                         navController = navController,
                         initialRequestId = pendingRequestId,
+                        initialScheduledRequestId = pendingScheduledRequestId,
+                        initialScheduledFriendId = pendingScheduledFriendId,
+                        initialScheduledNavigationToken = pendingScheduledNavigationToken,
                     )
                 }
             }
@@ -82,6 +92,15 @@ class MainActivity : ComponentActivity() {
         val newRequestId = extractRequestId(intent)
         if (!newRequestId.isNullOrBlank()) {
             pendingRequestId = newRequestId
+        }
+        intent.getStringExtra(NotificationHelper.EXTRA_SCHEDULED_REQUEST_ID)?.let {
+            pendingScheduledRequestId = it
+        }
+        intent.getStringExtra(NotificationHelper.EXTRA_FRIEND_ID)?.let {
+            pendingScheduledFriendId = it
+        }
+        if (!intent.getStringExtra(NotificationHelper.EXTRA_SCHEDULED_REQUEST_ID).isNullOrBlank()) {
+            pendingScheduledNavigationToken = System.currentTimeMillis()
         }
     }
 

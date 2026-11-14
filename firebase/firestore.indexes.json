@@ -15,6 +15,38 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "leaseUntil", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "scheduledAlarms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "senderNotificationSent", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "wakeUpRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "wakeUpRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "senderAcknowledgementSent", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "wakeUpRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "scheduleFinalized", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

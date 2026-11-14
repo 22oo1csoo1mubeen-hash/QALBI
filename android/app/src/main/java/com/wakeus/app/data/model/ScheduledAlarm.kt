@@ -9,6 +9,8 @@ enum class ScheduledAlarmStatus {
     SCHEDULED,
     PROCESSING,
     SENT,
+    ACKNOWLEDGED,
+    DECLINED,
     FAILED,
     CANCELLED,
     EXPIRED,
@@ -30,6 +32,20 @@ data class ScheduledAlarm(
     val attemptCount: Int,
     val failureCode: String? = null,
 ) {
+    /**
+     * Keep a due job visible briefly while the minute-based dispatcher claims it.
+     * A sent request can take up to another 15 minutes to complete, so the outer
+     * bound is 30 minutes from its scheduled instant (15 minutes late + 15-minute
+     * response window). This also hides stale records if a cloud finalization is
+     * delayed or was missed.
+     */
+    fun isActiveAt(nowMillis: Long = System.currentTimeMillis()): Boolean = when (status) {
+        ScheduledAlarmStatus.SCHEDULED,
+        ScheduledAlarmStatus.PROCESSING -> nowMillis < scheduledAtMillis + DISPATCH_GRACE_MS
+        ScheduledAlarmStatus.SENT -> nowMillis < scheduledAtMillis + COMPLETION_GRACE_MS
+        else -> false
+    }
+
     val canBeCancelled: Boolean
         get() = status == ScheduledAlarmStatus.SCHEDULED && scheduledAtMillis > System.currentTimeMillis()
 
@@ -41,6 +57,9 @@ data class ScheduledAlarm(
     }
 
     companion object {
+        private const val DISPATCH_GRACE_MS = 15 * 60 * 1000L
+        private const val COMPLETION_GRACE_MS = 30 * 60 * 1000L
+
         fun fromDocument(document: DocumentSnapshot): ScheduledAlarm? {
             val scheduledAt = document.getTimestamp("scheduledAt")?.toDate()?.time ?: return null
             val status = runCatching {

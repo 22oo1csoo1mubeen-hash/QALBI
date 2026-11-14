@@ -52,7 +52,8 @@ class IncomingRequestViewModel : ViewModel() {
                             senderUid = req.senderUid,
                             senderDisplayName = req.senderDisplayName,
                             senderUsername = req.senderUsername,
-                            expiresAt = req.expiresAt
+                            expiresAt = req.expiresAt,
+                            customMessage = req.customMessage,
                         )
                     }
                 }

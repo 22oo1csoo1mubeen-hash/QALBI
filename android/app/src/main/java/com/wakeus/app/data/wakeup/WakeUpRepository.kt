@@ -254,6 +254,34 @@ class WakeUpRepository(
         }
     }
 
+    /** Observes the current user's scheduled wake-up deliveries so the sender can open
+     * the existing waiting-for-response screen as soon as the dispatcher accepts delivery. */
+    fun observeScheduledOutgoingRequests(senderUid: String): Flow<List<WakeUpRequest>> = callbackFlow {
+        val firestore = firestoreProvider()
+        if (firestore == null || senderUid.isBlank()) {
+            trySend(emptyList())
+            close()
+            return@callbackFlow
+        }
+
+        val listener: ListenerRegistration = firestore.collection("wakeUpRequests")
+            .whereEqualTo("senderUid", senderUid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                val requests = snapshot.documents.mapNotNull { document ->
+                    document.data?.let { WakeUpRequest.fromMap(document.id, it) }
+                }.filter { request ->
+                    request.deliverySource == "CLOUDFLARE_SCHEDULED_ALARM" && request.fcmDispatched
+                }.sortedByDescending(WakeUpRequest::createdAt)
+                trySend(requests)
+            }
+
+        awaitClose { listener.remove() }
+    }
+
     /**
      * Receiver acknowledges the wake-up request ("I'm Awake!").
      * Atomic transition from PENDING -> ACKNOWLEDGED.

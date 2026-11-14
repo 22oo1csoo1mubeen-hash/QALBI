@@ -79,6 +79,7 @@ fun WakeUpScreen(
     friendId: String,
     onBack: () -> Unit,
     onManageSchedules: () -> Unit = {},
+    requestId: String? = null,
     viewModel: WakeUpViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -94,8 +95,9 @@ fun WakeUpScreen(
         }
     }
 
-    LaunchedEffect(friendId) {
+    LaunchedEffect(friendId, requestId) {
         viewModel.loadFriend(friendId)
+        requestId?.let(viewModel::openExistingRequest)
     }
 
     LaunchedEffect(uiState.errorMessage) {
@@ -572,6 +574,7 @@ fun WakeUpScreen(
                         }
                     }
 
+                    Spacer(Modifier.height(12.dp))
                     OutlinedButton(
                         onClick = onManageSchedules,
                         modifier = Modifier.fillMaxWidth().height(50.dp),

@@ -235,7 +235,8 @@ service cloud.firestore {
                       "scheduleId", "senderUid", "senderDisplayName", "senderUsername",
                       "receiverUid", "receiverDisplayName", "receiverUsername", "connectionId",
                       "message", "scheduledAt", "timeZoneId", "status", "attemptCount",
-                      "nextAttemptAt", "createdAt", "updatedAt", "schemaVersion"
+                      "nextAttemptAt", "createdAt", "updatedAt", "schemaVersion",
+                      "senderNotificationSent"
                     ])
                     && request.resource.data.scheduleId == scheduleId
                     && request.resource.data.senderUid == request.auth.uid
@@ -266,12 +267,32 @@ service cloud.firestore {
       allow update: if isAuthenticated()
                     && resource.data.senderUid == request.auth.uid
                     && resource.data.status == "SCHEDULED"
-                    && request.resource.data.status == "CANCELLED"
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                      "status", "cancelledAt", "updatedAt"
-                    ])
-                    && request.resource.data.cancelledAt == request.time
-                    && request.resource.data.updatedAt == request.time;
+                    && (
+                      (
+                        request.resource.data.status == "CANCELLED"
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                          "status", "cancelledAt", "updatedAt"
+                        ])
+                        && request.resource.data.cancelledAt == request.time
+                        && request.resource.data.updatedAt == request.time
+                      )
+                      ||
+                      (
+                        request.resource.data.status == "SCHEDULED"
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                          "scheduledAt", "nextAttemptAt", "timeZoneId", "message", "updatedAt"
+                        ])
+                        && request.resource.data.scheduledAt is timestamp
+                        && request.resource.data.scheduledAt > request.time
+                        && request.resource.data.scheduledAt <= request.time + duration.value(366, 'd')
+                        && request.resource.data.nextAttemptAt == request.resource.data.scheduledAt
+                        && request.resource.data.timeZoneId is string
+                        && request.resource.data.timeZoneId.size() <= 80
+                        && request.resource.data.message is string
+                        && request.resource.data.message.size() <= 160
+                        && request.resource.data.updatedAt == request.time
+                      )
+                    );
 
       allow delete: if false;
     }

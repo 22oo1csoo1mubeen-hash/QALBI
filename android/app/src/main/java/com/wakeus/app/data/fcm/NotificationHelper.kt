@@ -19,6 +19,10 @@ object NotificationHelper {
     const val CHANNEL_ID = "qalbi_wake_up_channel"
     const val CHANNEL_NAME = "Wake-Up Requests"
     const val CHANNEL_DESCRIPTION = "High-priority alerts when connected friends request to wake you up."
+    const val STATUS_CHANNEL_ID = "qalbi_schedule_updates"
+    const val STATUS_CHANNEL_NAME = "Scheduled Wake-Up Updates"
+    const val EXTRA_SCHEDULED_REQUEST_ID = "extra_scheduled_request_id"
+    const val EXTRA_FRIEND_ID = "extra_friend_id"
 
     const val EXTRA_REQUEST_ID = "extra_request_id"
     const val EXTRA_NAVIGATE_TO = "extra_navigate_to"
@@ -54,6 +58,61 @@ object NotificationHelper {
 
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    STATUS_CHANNEL_ID,
+                    STATUS_CHANNEL_NAME,
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    description = "Updates when a scheduled wake-up is sent or acknowledged."
+                    enableVibration(true)
+                },
+            )
+        }
+    }
+
+    /** Posts sender-side status updates without using the recipient's alarm-ringing channel. */
+    fun showScheduledAlarmStatusNotification(
+        context: Context,
+        requestId: String,
+        friendId: String,
+        friendDisplayName: String,
+        acknowledged: Boolean,
+    ) {
+        if (requestId.isBlank() || friendId.isBlank()) return
+        createNotificationChannel(context)
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_SCHEDULED_REQUEST_ID, requestId)
+            putExtra(EXTRA_FRIEND_ID, friendId)
+        }
+        val notificationKey = if (acknowledged) "${requestId}_acknowledged" else "${requestId}_sent"
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notificationKey.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val title = if (acknowledged) "${friendDisplayName} acknowledged your wake-up" else "Scheduled wake-up sent"
+        val text = if (acknowledged) {
+            "$friendDisplayName responded to your scheduled wake-up."
+        } else {
+            "Your scheduled wake-up was sent to $friendDisplayName. Waiting for their response."
+        }
+        val notification = NotificationCompat.Builder(context, STATUS_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(notificationKey.hashCode(), notification)
+        } catch (_: SecurityException) {
+            // Android 13+ can block status notifications when notification permission is denied.
         }
     }
 
@@ -64,7 +123,8 @@ object NotificationHelper {
         context: Context,
         requestId: String,
         senderDisplayName: String,
-        senderUsername: String
+        senderUsername: String,
+        customMessage: String = "",
     ): Notification {
         createNotificationChannel(context)
 
@@ -107,10 +167,23 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val safeCustomMessage = customMessage
+            .trim()
+            .take(160)
+        val notificationText = safeCustomMessage.ifBlank {
+            "@$senderUsername is waking you up! Tap to respond."
+        }
+        val expandedNotificationText = if (safeCustomMessage.isBlank()) {
+            notificationText
+        } else {
+            "@$senderUsername is waking you up!\n\n\"$safeCustomMessage\"\n\nTap to respond."
+        }
+
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle("☀️ Wake Up from $senderDisplayName")
-            .setContentText("@$senderUsername is waking you up! Tap to respond.")
+            .setContentText(notificationText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(expandedNotificationText))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setOngoing(true)
@@ -138,7 +211,8 @@ object NotificationHelper {
         context: Context,
         requestId: String,
         senderDisplayName: String,
-        senderUsername: String
+        senderUsername: String,
+        customMessage: String = "",
     ) {
         createNotificationChannel(context)
 
@@ -146,7 +220,8 @@ object NotificationHelper {
             context = context,
             requestId = requestId,
             senderDisplayName = senderDisplayName,
-            senderUsername = senderUsername
+            senderUsername = senderUsername,
+            customMessage = customMessage,
         )
 
         try {

@@ -77,6 +77,7 @@ import androidx.core.view.WindowCompat
 import com.wakeus.app.R
 import com.wakeus.app.data.model.Friend
 import com.wakeus.app.data.repository.QalbiRepository
+import com.wakeus.app.ui.secret.BabyLoveTextTapDetector
 import com.wakeus.app.ui.theme.QalbiTheme
 
 // ─── Home Screen Palette Tokens ─────────────────────────────────────────────
@@ -105,6 +106,7 @@ fun HomeScreen(
     onProfile: () -> Unit = {},
     onIncomingRequest: (String) -> Unit = {},
     onOpenSecretRomantic: () -> Unit = {},
+    onOpenBabyLove: () -> Unit = {},
 ) {
     val authState by QalbiRepository.authState.collectAsState()
     val user = (authState as? com.wakeus.app.data.auth.AuthState.Authenticated)?.user ?: QalbiRepository.demoUser
@@ -123,13 +125,41 @@ fun HomeScreen(
             onTrigger = onOpenSecretRomantic,
         )
     }
+    var isOpeningBabyLove by remember { mutableStateOf(false) }
+    val babyLoveTextDetector = remember(onOpenBabyLove) {
+        BabyLoveTextTapDetector(
+            maxIntervalMillis = 1000L,
+            requiredTaps = 9,
+            onTrigger = {
+                if (!isOpeningBabyLove) {
+                    isOpeningBabyLove = true
+                    onOpenBabyLove()
+                }
+            },
+        )
+    }
 
     fun resetSecretTaps() {
         secretDetector.reset()
     }
 
+    fun resetBabyLoveTextTaps() {
+        babyLoveTextDetector.reset()
+    }
+
+    fun resetAllSecretTaps() {
+        resetSecretTaps()
+        resetBabyLoveTextTaps()
+    }
+
     val onSecretHeartClick: () -> Unit = {
+        resetBabyLoveTextTaps()
         secretDetector.onHeartTap(SystemClock.uptimeMillis())
+    }
+    val onBabyLoveTextClick: () -> Unit = {
+        // Preserve the original behavior: touching the wordmark interrupts a heart sequence.
+        resetSecretTaps()
+        babyLoveTextDetector.onTextTap(SystemClock.uptimeMillis())
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -137,14 +167,15 @@ fun HomeScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 greeting = GreetingHelper.getGreeting()
-                resetSecretTaps()
+                resetAllSecretTaps()
+                isOpeningBabyLove = false
             } else if (event == Lifecycle.Event.ON_PAUSE) {
-                resetSecretTaps()
+                resetAllSecretTaps()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
-            resetSecretTaps()
+            resetAllSecretTaps()
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
@@ -223,7 +254,7 @@ fun HomeScreen(
                             modifier = Modifier.clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
-                                onClick = { resetSecretTaps() },
+                                onClick = onBabyLoveTextClick,
                             ),
                         )
                     }
@@ -231,7 +262,7 @@ fun HomeScreen(
                     // Profile Action Button
                     IconButton(
                         onClick = {
-                            resetSecretTaps()
+                            resetAllSecretTaps()
                             onProfile()
                         },
                         modifier = Modifier

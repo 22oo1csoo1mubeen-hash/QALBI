@@ -1,0 +1,24 @@
+# Local build and editor state
+/.gradle/
+/.idea/
+/.tmp/
+/resources/
+**/build/
+**/node_modules/
+**/.wrangler/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+**/serviceAccountKey.json
+**/service-account*.json
+*.jks
+*.keystore
+*.pem
+*.p12
+
+# OS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store

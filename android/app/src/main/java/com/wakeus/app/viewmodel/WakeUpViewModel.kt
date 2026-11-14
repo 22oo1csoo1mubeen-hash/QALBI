@@ -152,6 +152,18 @@ class WakeUpViewModel : ViewModel() {
         }
     }
 
+    fun openExistingRequest(requestId: String) {
+        if (requestId.isBlank() || _uiState.value.activeRequest?.requestId == requestId) return
+        _uiState.update {
+            it.copy(
+                wakeUpState = WakeUpState.PENDING,
+                statusMessage = "Loading scheduled wake-up request…",
+                errorMessage = null,
+            )
+        }
+        observeRequestStatus(requestId)
+    }
+
     fun cancelActiveRequest() {
         val requestId = _uiState.value.activeRequest?.requestId ?: return
         if (_uiState.value.isCancelling) return

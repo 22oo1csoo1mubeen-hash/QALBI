@@ -55,6 +55,10 @@ export async function runDueSchedules(env, nowMillis = Date.now()) {
       await recordFailure(db, document, nowMillis, error);
     }
   }
+  await expireDueWakeRequests(db, nowMillis);
+  await notifyPendingSentSchedules(db, serviceAccount, nowMillis);
+  await finalizeTerminalScheduledRequests(db, nowMillis);
+  await notifyAcknowledgedScheduledRequests(db, serviceAccount, nowMillis);
   return { examined: docs.length };
 }
 
@@ -113,13 +117,13 @@ async function processSchedule(db, serviceAccount, document, nowMillis) {
   const requestName = db.documentName("wakeUpRequests", deliveryId);
   const existingRequest = await db.get(requestName);
   if (existingRequest?.fields?.fcmDispatched?.booleanValue === true) {
-    await markScheduleSent(db, document.name, nowMillis, deliveryId);
+    await markScheduleSent(db, document.name, nowMillis, deliveryId, data.senderNotificationSent === true);
     return;
   }
   const priorRequestStatus = existingRequest?.fields?.status?.stringValue;
   if (priorRequestStatus && priorRequestStatus !== "PENDING") {
     if (["ACKNOWLEDGED", "DECLINED"].includes(priorRequestStatus)) {
-      await markScheduleSent(db, document.name, nowMillis, deliveryId);
+      await markScheduleSent(db, document.name, nowMillis, deliveryId, data.senderNotificationSent === true);
     } else {
       await db.patch(document.name, {
         status: "FAILED",
@@ -132,16 +136,7 @@ async function processSchedule(db, serviceAccount, document, nowMillis) {
   }
 
   const now = nowMillis;
-  const expiry = scheduledAt + MAX_ALARM_LATENESS_MS;
-  if (now >= expiry) {
-    await db.patch(document.name, {
-      status: "EXPIRED",
-      failureCode: "schedule_missed_delivery_window",
-      updatedAt: timestamp(now),
-      leaseUntil: nullValue(),
-    }, ["status", "failureCode", "updatedAt", "leaseUntil"]);
-    return;
-  }
+  const expiry = now + MAX_ALARM_LATENESS_MS;
 
   const [senderProfile, receiverProfile, tokenDocuments] = await Promise.all([
     db.get(db.documentName("publicProfiles", schedule.senderUid)),
@@ -171,6 +166,8 @@ async function processSchedule(db, serviceAccount, document, nowMillis) {
     connectionId: schedule.connectionId,
     customMessage: (schedule.message || "").slice(0, 160),
     status: "PENDING",
+    senderAcknowledgementSent: false,
+    scheduleFinalized: false,
     createdAt: timestamp(now),
     expiresAt: timestamp(expiry),
     updatedAt: timestamp(now),
@@ -205,7 +202,7 @@ async function processSchedule(db, serviceAccount, document, nowMillis) {
     fcmFailureCount: results.length - successCount,
     fcmAttemptedAt: timestamp(nowMillis),
   }, ["fcmDispatched", "fcmDispatchState", "fcmAcceptedCount", "fcmFailureCount", "fcmAttemptedAt"]);
-  await markScheduleSent(db, document.name, nowMillis, deliveryId);
+  await markScheduleSent(db, document.name, nowMillis, deliveryId, data.senderNotificationSent === true);
 }
 
 async function validateConnection(db, schedule) {
@@ -292,7 +289,7 @@ async function recordFailure(db, document, nowMillis, error) {
   }, ["status", "nextAttemptAt", "failureCode", "updatedAt", "leaseUntil"]).catch(() => {});
 }
 
-async function markScheduleSent(db, scheduleName, nowMillis, deliveryId) {
+async function markScheduleSent(db, scheduleName, nowMillis, deliveryId, senderNotificationSent = false) {
   await db.patch(scheduleName, {
     status: "SENT",
     sentAt: timestamp(nowMillis),
@@ -300,7 +297,118 @@ async function markScheduleSent(db, scheduleName, nowMillis, deliveryId) {
     updatedAt: timestamp(nowMillis),
     leaseUntil: nullValue(),
     failureCode: nullValue(),
-  }, ["status", "sentAt", "deliveryRequestId", "updatedAt", "leaseUntil", "failureCode"]);
+    senderNotificationSent,
+  }, ["status", "sentAt", "deliveryRequestId", "updatedAt", "leaseUntil", "failureCode", "senderNotificationSent"]);
+}
+
+async function expireDueWakeRequests(db, nowMillis) {
+  const dueRequests = await db.queryDue("PENDING", "expiresAt", nowMillis, "wakeUpRequests");
+  for (const document of dueRequests) {
+    const data = decodeFields(document.fields || {});
+    if (data.status !== "PENDING" || timestampMillis(data.expiresAt) > nowMillis) continue;
+    await db.patch(document.name, {
+      status: "EXPIRED",
+      expiredAt: timestamp(nowMillis),
+      updatedAt: timestamp(nowMillis),
+    }, ["status", "expiredAt", "updatedAt"], document.updateTime);
+  }
+}
+
+async function finalizeTerminalScheduledRequests(db, nowMillis) {
+  for (const status of ["ACKNOWLEDGED", "DECLINED", "CANCELLED", "EXPIRED"]) {
+    const requests = await db.queryFlagged("wakeUpRequests", status, "scheduleFinalized", false);
+    for (const document of requests) {
+      const data = decodeFields(document.fields || {});
+      if (data.deliverySource !== "CLOUDFLARE_SCHEDULED_ALARM" || !data.scheduleId) continue;
+
+      const scheduleStatus = status === "CANCELLED" ? "CANCELLED" : status;
+      const scheduleName = db.documentName("scheduledAlarms", data.scheduleId);
+      const scheduleDocument = await db.get(scheduleName);
+      if (!scheduleDocument) continue;
+      const scheduleData = decodeFields(scheduleDocument.fields || {});
+      if (scheduleData.status !== scheduleStatus) {
+        if (scheduleData.status !== "SENT") continue;
+        const finalized = await db.patch(scheduleName, {
+          status: scheduleStatus,
+          completedAt: timestamp(nowMillis),
+          updatedAt: timestamp(nowMillis),
+        }, ["status", "completedAt", "updatedAt"], scheduleDocument.updateTime);
+        if (!finalized) continue;
+      }
+
+      const currentRequest = await db.get(document.name);
+      if (!currentRequest || decodeFields(currentRequest.fields || {}).scheduleFinalized === true) continue;
+      await db.patch(document.name, {
+        scheduleFinalized: true,
+        scheduleFinalizedAt: timestamp(nowMillis),
+      }, ["scheduleFinalized", "scheduleFinalizedAt"], currentRequest.updateTime);
+    }
+  }
+}
+
+async function notifyPendingSentSchedules(db, serviceAccount, nowMillis) {
+  const schedules = await db.queryFlagged("scheduledAlarms", "SENT", "senderNotificationSent", false);
+  for (const document of schedules) {
+    const schedule = decodeFields(document.fields || {});
+    if (!schedule.senderUid || !schedule.receiverUid || !schedule.deliveryRequestId) continue;
+    const tokenDocuments = await db.list(db.documentName("users", schedule.senderUid, "fcmTokens"));
+    const tokens = tokenDocuments
+      .map((tokenDocument) => decodeFields(tokenDocument.fields || {}).token)
+      .filter((token) => typeof token === "string" && token.length > 20);
+    if (tokens.length === 0) continue;
+
+    const results = await sendFcm(serviceAccount, tokens, {
+      type: "SCHEDULED_ALARM_SENT",
+      requestId: schedule.deliveryRequestId,
+      scheduleId: schedule.scheduleId || documentId(document),
+      senderUid: schedule.senderUid,
+      receiverUid: schedule.receiverUid,
+      receiverDisplayName: schedule.receiverDisplayName || "your friend",
+      createdAt: String(nowMillis),
+    }, 24 * 60 * 60 * 1000);
+    if (!results.some((result) => result.ok)) continue;
+
+    await db.patch(document.name, {
+      senderNotificationSent: true,
+      senderNotificationSentAt: timestamp(nowMillis),
+      updatedAt: timestamp(nowMillis),
+    }, ["senderNotificationSent", "senderNotificationSentAt", "updatedAt"], document.updateTime);
+  }
+}
+
+async function notifyAcknowledgedScheduledRequests(db, serviceAccount, nowMillis) {
+  const requests = await db.queryFlagged("wakeUpRequests", "ACKNOWLEDGED", "senderAcknowledgementSent", false);
+  for (const document of requests) {
+    const request = decodeFields(document.fields || {});
+    if (request.deliverySource !== "CLOUDFLARE_SCHEDULED_ALARM" || !request.scheduleId || !request.senderUid) continue;
+    const tokenDocuments = await db.list(db.documentName("users", request.senderUid, "fcmTokens"));
+    const tokens = tokenDocuments
+      .map((tokenDocument) => decodeFields(tokenDocument.fields || {}).token)
+      .filter((token) => typeof token === "string" && token.length > 20);
+    if (tokens.length === 0) {
+      await db.patch(document.name, {
+        senderAcknowledgementSent: true,
+        senderAcknowledgementSkippedAt: timestamp(nowMillis),
+      }, ["senderAcknowledgementSent", "senderAcknowledgementSkippedAt"], document.updateTime);
+      continue;
+    }
+
+    const results = await sendFcm(serviceAccount, tokens, {
+      type: "SCHEDULED_ALARM_ACKNOWLEDGED",
+      requestId: request.requestId || documentId(document),
+      scheduleId: request.scheduleId,
+      senderUid: request.senderUid,
+      receiverUid: request.receiverUid,
+      receiverDisplayName: request.receiverDisplayName || "Your friend",
+      acknowledgedAt: String(nowMillis),
+    }, 24 * 60 * 60 * 1000);
+    if (!results.some((result) => result.ok)) continue;
+
+    await db.patch(document.name, {
+      senderAcknowledgementSent: true,
+      senderAcknowledgementSentAt: timestamp(nowMillis),
+    }, ["senderAcknowledgementSent", "senderAcknowledgementSentAt"], document.updateTime);
+  }
 }
 
 class FirestoreRest {
@@ -342,15 +450,30 @@ class FirestoreRest {
     return body.documents || [];
   }
 
-  async queryDue(status, dueField, nowMillis) {
+  async queryDue(status, dueField, nowMillis, collectionId = "scheduledAlarms") {
     const query = {
       structuredQuery: {
-        from: [{ collectionId: "scheduledAlarms" }],
+        from: [{ collectionId }],
         where: { compositeFilter: { op: "AND", filters: [
           { fieldFilter: { field: { fieldPath: "status" }, op: "EQUAL", value: { stringValue: status } } },
           { fieldFilter: { field: { fieldPath: dueField }, op: "LESS_THAN_OR_EQUAL", value: { timestampValue: timestamp(nowMillis).timestampValue } } },
         ] } },
         orderBy: [{ field: { fieldPath: dueField }, direction: "ASCENDING" }],
+        limit: MAX_BATCH_SIZE,
+      },
+    };
+    const rows = await this.request(`${this.base}:runQuery`, { method: "POST", body: JSON.stringify(query) });
+    return rows.map((row) => row.document).filter(Boolean);
+  }
+
+  async queryFlagged(collectionId, status, flagField, flagValue) {
+    const query = {
+      structuredQuery: {
+        from: [{ collectionId }],
+        where: { compositeFilter: { op: "AND", filters: [
+          { fieldFilter: { field: { fieldPath: "status" }, op: "EQUAL", value: { stringValue: status } } },
+          { fieldFilter: { field: { fieldPath: flagField }, op: "EQUAL", value: { booleanValue: flagValue } } },
+        ] } },
         limit: MAX_BATCH_SIZE,
       },
     };

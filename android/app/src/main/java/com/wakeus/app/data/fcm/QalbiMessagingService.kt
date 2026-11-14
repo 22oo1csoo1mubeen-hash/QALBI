@@ -51,6 +51,27 @@ class QalbiMessagingService : FirebaseMessagingService() {
             null
         }
 
+        val messageType = data["type"]
+        if (messageType == "SCHEDULED_ALARM_SENT" || messageType == "SCHEDULED_ALARM_ACKNOWLEDGED") {
+            val senderUid = data["senderUid"]
+            val friendId = data["receiverUid"]
+            val friendName = data["receiverDisplayName"]?.takeIf(String::isNotBlank) ?: "Your friend"
+            if (!currentUid.isNullOrBlank() && currentUid == senderUid &&
+                !requestId.isNullOrBlank() && !friendId.isNullOrBlank()
+            ) {
+                NotificationHelper.showScheduledAlarmStatusNotification(
+                    context = applicationContext,
+                    requestId = requestId,
+                    friendId = friendId,
+                    friendDisplayName = friendName,
+                    acknowledged = messageType == "SCHEDULED_ALARM_ACKNOWLEDGED",
+                )
+            } else {
+                AlarmDiagnostics.record(applicationContext, AlarmDiagnosticEvent.FCM_MESSAGE_REJECTED, requestId)
+            }
+            return
+        }
+
         val result = IncomingAlarmPayloadValidator.validate(data, currentUid, System.currentTimeMillis())
         val payload = (result as? IncomingAlarmPayloadResult.Valid)?.payload
         if (payload == null) {

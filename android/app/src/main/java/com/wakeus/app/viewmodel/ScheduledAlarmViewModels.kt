@@ -65,6 +65,7 @@ data class ScheduledAlarmsUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val cancellingId: String? = null,
+    val editingId: String? = null,
 )
 
 class ScheduledAlarmsViewModel : ViewModel() {
@@ -87,13 +88,27 @@ class ScheduledAlarmsViewModel : ViewModel() {
     }
 
     fun cancel(schedule: ScheduledAlarm) {
-        if (_uiState.value.cancellingId != null) return
+        if (_uiState.value.cancellingId != null || _uiState.value.editingId != null) return
         _uiState.update { it.copy(cancellingId = schedule.scheduleId, error = null) }
         viewModelScope.launch {
             val result = QalbiRepository.scheduledAlarmRepository.cancel(schedule)
             _uiState.update {
                 it.copy(
                     cancellingId = null,
+                    error = result.exceptionOrNull()?.message,
+                )
+            }
+        }
+    }
+
+    fun edit(schedule: ScheduledAlarm, scheduledAt: Long, timeZoneId: String, message: String) {
+        if (_uiState.value.cancellingId != null || _uiState.value.editingId != null) return
+        _uiState.update { it.copy(editingId = schedule.scheduleId, error = null) }
+        viewModelScope.launch {
+            val result = QalbiRepository.scheduledAlarmRepository.edit(schedule, scheduledAt, timeZoneId, message)
+            _uiState.update {
+                it.copy(
+                    editingId = null,
                     error = result.exceptionOrNull()?.message,
                 )
             }

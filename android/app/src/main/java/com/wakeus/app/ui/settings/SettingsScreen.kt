@@ -572,7 +572,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = "v1.0.0 (Release Candidate)",
+                                    text = "v2.0.0",
                                     fontSize = 12.sp,
                                     color = MutedWineText,
                                 )

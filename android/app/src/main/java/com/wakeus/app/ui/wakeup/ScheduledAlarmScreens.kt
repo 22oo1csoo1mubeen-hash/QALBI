@@ -45,8 +45,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -72,8 +72,10 @@ import com.wakeus.app.ui.components.QalbiRomanticButton
 import com.wakeus.app.viewmodel.CreateScheduleViewModel
 import com.wakeus.app.viewmodel.ScheduledAlarmsViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.text.DateFormat as JavaDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.TimeZone
 
 private val ScheduleBg = Color(0xFFFBF6F3)
@@ -97,9 +99,15 @@ fun ScheduleAlarmScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf("") }
-    var selectedDate by remember { mutableStateOf(Calendar.getInstance().apply { add(Calendar.HOUR_OF_DAY, 1) }) }
-    var selectedTime by remember {
-        mutableStateOf(Calendar.getInstance().apply { add(Calendar.HOUR_OF_DAY, 1) })
+    var currentTimeMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
+    var selectedTime by remember { mutableStateOf(Calendar.getInstance()) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000L)
+            currentTimeMillis = System.currentTimeMillis()
+        }
     }
 
     if (!view.isInEditMode) SideEffect {
@@ -219,6 +227,12 @@ fun ScheduleAlarmScreen(
                             Text(JavaDateFormat.getTimeInstance(JavaDateFormat.SHORT).format(selectedTime.time), color = ScheduleWine)
                         }
                         Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Current time: ${JavaDateFormat.getTimeInstance(JavaDateFormat.SHORT).format(Date(currentTimeMillis))}",
+                            color = ScheduleMuted,
+                            fontSize = 13.sp,
+                        )
+                        Spacer(Modifier.height(4.dp))
                         Text("Time zone: ${TimeZone.getDefault().id}", color = ScheduleMuted, fontSize = 12.sp)
                         Spacer(Modifier.height(14.dp))
                         OutlinedTextField(
@@ -271,6 +285,14 @@ fun ScheduledAlarmsScreen(
 ) {
     val view = LocalView.current
     val state by viewModel.uiState.collectAsState()
+    var scheduleClockMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            scheduleClockMillis = System.currentTimeMillis()
+        }
+    }
+    val activeSchedules = state.schedules.filter { it.isActiveAt(scheduleClockMillis) }
     val snackbar = remember { SnackbarHostState() }
     var confirmCancel by remember { mutableStateOf<ScheduledAlarm?>(null) }
 
@@ -312,17 +334,17 @@ fun ScheduledAlarmsScreen(
             ) {
                 Spacer(Modifier.height(10.dp))
                 Text("Your upcoming wake-up calls", color = ScheduleMuted, fontSize = 14.sp, modifier = Modifier.padding(bottom = 12.dp))
-                Text("To change a time, cancel that schedule and create a new one.", color = ScheduleMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 12.dp))
+                Text("Pending alarms can be edited or cancelled from the Friends tab.", color = ScheduleMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 12.dp))
                 if (state.isLoading) {
                     Box(Modifier.fillMaxWidth().padding(35.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = ScheduleWine)
                     }
-                } else if (state.schedules.isEmpty()) {
+                } else if (activeSchedules.isEmpty()) {
                     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = ScheduleCard), border = BorderStroke(1.dp, ScheduleBorder)) {
-                        Text("No scheduled alarms yet. Open a connected friend's profile and choose Schedule Alarm.", color = ScheduleMuted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(22.dp))
+                        Text("No active scheduled alarms. Open a connected friend's profile and choose Schedule Alarm.", color = ScheduleMuted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(22.dp))
                     }
                 } else {
-                    state.schedules.forEach { schedule ->
+                    activeSchedules.forEach { schedule ->
                         ScheduledAlarmCard(
                             schedule = schedule,
                             isCancelling = state.cancellingId == schedule.scheduleId,
@@ -376,7 +398,9 @@ private fun ScheduledAlarmCard(schedule: ScheduledAlarm, isCancelling: Boolean, 
 private fun statusLabel(status: ScheduledAlarmStatus): String = when (status) {
     ScheduledAlarmStatus.SCHEDULED -> "Scheduled"
     ScheduledAlarmStatus.PROCESSING -> "Sending"
-    ScheduledAlarmStatus.SENT -> "Sent"
+    ScheduledAlarmStatus.SENT -> "Sent · waiting"
+    ScheduledAlarmStatus.ACKNOWLEDGED -> "Acknowledged"
+    ScheduledAlarmStatus.DECLINED -> "Declined"
     ScheduledAlarmStatus.FAILED -> "Failed"
     ScheduledAlarmStatus.CANCELLED -> "Cancelled"
     ScheduledAlarmStatus.EXPIRED -> "Expired"
@@ -386,7 +410,8 @@ private fun statusColor(status: ScheduledAlarmStatus): Color = when (status) {
     ScheduledAlarmStatus.SCHEDULED -> Color(0xFF986F19)
     ScheduledAlarmStatus.PROCESSING -> Color(0xFF7A5862)
     ScheduledAlarmStatus.SENT -> Color(0xFF23764A)
-    ScheduledAlarmStatus.FAILED, ScheduledAlarmStatus.EXPIRED -> Color(0xFF9D253F)
+    ScheduledAlarmStatus.ACKNOWLEDGED -> Color(0xFF23764A)
+    ScheduledAlarmStatus.DECLINED, ScheduledAlarmStatus.FAILED, ScheduledAlarmStatus.EXPIRED -> Color(0xFF9D253F)
     ScheduledAlarmStatus.CANCELLED -> ScheduleMuted
 }
 
